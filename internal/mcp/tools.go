@@ -36,6 +36,26 @@ type ListEntitiesInput struct {
 
 type GetSchemaInput struct{}
 
+type GetCurrentStateInput struct {
+	Name  string `json:"name" jsonschema:"entity name"`
+	Layer string `json:"layer" jsonschema:"campaign layer"`
+}
+
+type GetTimelineInput struct {
+	Layer       string `json:"layer" jsonschema:"campaign layer"`
+	Entity      string `json:"entity,omitempty" jsonschema:"optional entity name"`
+	FromSession int    `json:"from_session,omitempty" jsonschema:"minimum session number"`
+	ToSession   int    `json:"to_session,omitempty" jsonschema:"maximum session number"`
+}
+
+type CheckConsistencyInput struct {
+	Name      string `json:"name" jsonschema:"entity name"`
+	Type      string `json:"type,omitempty" jsonschema:"optional entity type"`
+	Layer     string `json:"layer" jsonschema:"campaign layer"`
+	Depth     int    `json:"depth,omitempty" jsonschema:"relationship traversal depth"`
+	Direction string `json:"direction,omitempty" jsonschema:"outgoing, incoming, or both"`
+}
+
 type EntityOutput struct {
 	Name       string         `json:"name"`
 	EntityType string         `json:"type"`
@@ -92,10 +112,11 @@ type EntityTypeOutput struct {
 }
 
 type PropertyOutput struct {
-	Name    string   `json:"name"`
-	Type    string   `json:"type"`
-	Values  []string `json:"values,omitempty"`
-	Default string   `json:"default,omitempty"`
+	Name     string   `json:"name"`
+	Type     string   `json:"type"`
+	Values   []string `json:"values,omitempty"`
+	Default  string   `json:"default,omitempty"`
+	Required bool     `json:"required,omitempty"`
 }
 
 type FieldMappingOutput struct {
@@ -116,6 +137,39 @@ type GetRelationshipsOutput struct {
 
 type ListEntitiesOutput struct {
 	Entities []EntitySummaryOutput `json:"entities"`
+}
+
+type ConsequenceOutput struct {
+	Entity   string `json:"entity"`
+	Property string `json:"property"`
+	Value    any    `json:"value,omitempty"`
+	Add      any    `json:"add,omitempty"`
+}
+
+type EventOutput struct {
+	Name         string              `json:"name"`
+	Layer        string              `json:"layer"`
+	Session      int                 `json:"session"`
+	DateInWorld  string              `json:"date_in_world"`
+	Participants []string            `json:"participants"`
+	Location     []string            `json:"location"`
+	Consequences []ConsequenceOutput `json:"consequences"`
+}
+
+type CurrentStateOutput struct {
+	BaseProperties    map[string]any `json:"base_properties"`
+	Events            []EventOutput  `json:"events"`
+	CurrentProperties map[string]any `json:"current_properties"`
+}
+
+type TimelineOutput struct {
+	Events []EventOutput `json:"events"`
+}
+
+type CheckConsistencyOutput struct {
+	Entity        EntityOutput         `json:"entity"`
+	Relationships []RelationshipOutput `json:"relationships"`
+	Events        []EventOutput        `json:"events"`
 }
 
 func (s *Server) registerTools() {
@@ -143,6 +197,21 @@ func (s *Server) registerTools() {
 		Name:        "get_schema",
 		Description: "Return the current schema definition",
 	}, s.handleGetSchema)
+
+	sdk.AddTool(s.mcp, &sdk.Tool{
+		Name:        "get_current_state",
+		Description: "Return base properties, events, and current state for an entity",
+	}, s.handleGetCurrentState)
+
+	sdk.AddTool(s.mcp, &sdk.Tool{
+		Name:        "get_timeline",
+		Description: "Return ordered campaign events for a layer",
+	}, s.handleGetTimeline)
+
+	sdk.AddTool(s.mcp, &sdk.Tool{
+		Name:        "check_consistency",
+		Description: "Gather entity context, relationships, and events for review",
+	}, s.handleCheckConsistency)
 }
 
 func (s *Server) handleSearchLore(ctx context.Context, req *sdk.CallToolRequest, input SearchLoreInput) (*sdk.CallToolResult, SearchLoreOutput, error) {
@@ -212,6 +281,63 @@ func (s *Server) handleGetSchema(ctx context.Context, req *sdk.CallToolRequest, 
 	return nil, schemaOutputFromConfig(s.schema), nil
 }
 
+func (s *Server) handleGetCurrentState(ctx context.Context, req *sdk.CallToolRequest, input GetCurrentStateInput) (*sdk.CallToolResult, CurrentStateOutput, error) {
+	if input.Name == "" || input.Layer == "" {
+		return nil, CurrentStateOutput{}, fmt.Errorf("name and layer are required")
+	}
+	state, err := s.graph.GetCurrentState(ctx, input.Name, input.Layer)
+	if err != nil {
+		return nil, CurrentStateOutput{}, err
+	}
+	if state == nil {
+		return nil, CurrentStateOutput{}, fmt.Errorf("state not found")
+	}
+	return nil, currentStateOutputFromGraph(state), nil
+}
+
+func (s *Server) handleGetTimeline(ctx context.Context, req *sdk.CallToolRequest, input GetTimelineInput) (*sdk.CallToolResult, TimelineOutput, error) {
+	if input.Layer == "" {
+		return nil, TimelineOutput{}, fmt.Errorf("layer is required")
+	}
+	events, err := s.graph.GetTimeline(ctx, input.Layer, input.Entity, input.FromSession, input.ToSession)
+	if err != nil {
+		return nil, TimelineOutput{}, err
+	}
+	return nil, TimelineOutput{Events: eventOutputsFromGraph(events)}, nil
+}
+
+func (s *Server) handleCheckConsistency(ctx context.Context, req *sdk.CallToolRequest, input CheckConsistencyInput) (*sdk.CallToolResult, CheckConsistencyOutput, error) {
+	if input.Name == "" || input.Layer == "" {
+		return nil, CheckConsistencyOutput{}, fmt.Errorf("name and layer are required")
+	}
+	entity, err := s.graph.GetEntity(ctx, input.Name, input.Type)
+	if err != nil {
+		return nil, CheckConsistencyOutput{}, err
+	}
+	if entity == nil {
+		return nil, CheckConsistencyOutput{}, fmt.Errorf("entity not found")
+	}
+	depth := input.Depth
+	if depth == 0 {
+		depth = 1
+	}
+	rels, err := s.graph.GetRelationships(ctx, input.Name, "", input.Direction, depth)
+	if err != nil {
+		return nil, CheckConsistencyOutput{}, err
+	}
+	events, err := s.graph.GetTimeline(ctx, input.Layer, input.Name, 0, 0)
+	if err != nil {
+		return nil, CheckConsistencyOutput{}, err
+	}
+
+	output := CheckConsistencyOutput{
+		Entity:        entityOutputFromGraph(entity),
+		Relationships: relationshipOutputsFromGraph(rels),
+		Events:        eventOutputsFromGraph(events),
+	}
+	return nil, output, nil
+}
+
 func schemaOutputFromConfig(schema *config.Schema) SchemaOutput {
 	if schema == nil {
 		return SchemaOutput{}
@@ -231,10 +357,11 @@ func schemaOutputFromConfig(schema *config.Schema) SchemaOutput {
 		}
 		for _, prop := range entityType.Properties {
 			entityOut.Properties = append(entityOut.Properties, PropertyOutput{
-				Name:    prop.Name,
-				Type:    prop.Type,
-				Values:  prop.Values,
-				Default: prop.Default,
+				Name:     prop.Name,
+				Type:     prop.Type,
+				Values:   prop.Values,
+				Default:  prop.Default,
+				Required: prop.Required,
 			})
 		}
 		for _, mapping := range entityType.FieldMappings {
@@ -312,4 +439,69 @@ func relationshipOutputFromGraph(rel graph.Relationship) RelationshipOutput {
 		Direction: rel.Direction,
 		Depth:     rel.Depth,
 	}
+}
+
+func currentStateOutputFromGraph(state *graph.CurrentState) CurrentStateOutput {
+	if state == nil {
+		return CurrentStateOutput{}
+	}
+	base := copyMap(state.BaseProperties)
+	current := copyMap(state.CurrentProperties)
+	return CurrentStateOutput{
+		BaseProperties:    base,
+		Events:            eventOutputsFromGraph(state.Events),
+		CurrentProperties: current,
+	}
+}
+
+func eventOutputsFromGraph(events []graph.Event) []EventOutput {
+	output := make([]EventOutput, 0, len(events))
+	for _, event := range events {
+		output = append(output, eventOutputFromGraph(event))
+	}
+	return output
+}
+
+func eventOutputFromGraph(event graph.Event) EventOutput {
+	return EventOutput{
+		Name:         event.Name,
+		Layer:        event.Layer,
+		Session:      event.Session,
+		DateInWorld:  event.DateInWorld,
+		Participants: append([]string{}, event.Participants...),
+		Location:     append([]string{}, event.Location...),
+		Consequences: consequenceOutputsFromGraph(event.Consequences),
+	}
+}
+
+func consequenceOutputsFromGraph(consequences []graph.Consequence) []ConsequenceOutput {
+	output := make([]ConsequenceOutput, 0, len(consequences))
+	for _, consequence := range consequences {
+		output = append(output, ConsequenceOutput{
+			Entity:   consequence.Entity,
+			Property: consequence.Property,
+			Value:    consequence.Value,
+			Add:      consequence.Add,
+		})
+	}
+	return output
+}
+
+func relationshipOutputsFromGraph(rels []graph.Relationship) []RelationshipOutput {
+	output := make([]RelationshipOutput, 0, len(rels))
+	for _, rel := range rels {
+		output = append(output, relationshipOutputFromGraph(rel))
+	}
+	return output
+}
+
+func copyMap(input map[string]any) map[string]any {
+	if input == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
 }

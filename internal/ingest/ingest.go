@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -87,6 +88,25 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 
 			entityType, _ := schema.EntityTypeByName(doc.EntityType)
 			props := filterProperties(doc.Frontmatter, entityType)
+
+			if strings.EqualFold(doc.EntityType, "event") {
+				if value, ok := doc.Frontmatter["consequences"]; ok {
+					consequences, err := parseConsequences(value)
+					if err != nil {
+						result.Errors = append(result.Errors, fmt.Errorf("parsing consequences in %s: %w", path, err))
+						continue
+					}
+					payload, err := json.Marshal(consequences)
+					if err != nil {
+						result.Errors = append(result.Errors, fmt.Errorf("encoding consequences in %s: %w", path, err))
+						continue
+					}
+					if props == nil {
+						props = make(map[string]any)
+					}
+					props["consequences_json"] = string(payload)
+				}
+			}
 
 			input := graph.EntityInput{
 				Name:       doc.Title,
@@ -263,7 +283,7 @@ func filterProperties(frontmatter map[string]any, entityType *config.EntityType)
 
 	props := make(map[string]any)
 	for key, value := range frontmatter {
-		if key == "title" || key == "type" || key == "tags" || key == "related" {
+		if key == "title" || key == "type" || key == "tags" || key == "related" || key == "consequences" {
 			continue
 		}
 		if isFieldMapping(entityType, key) {

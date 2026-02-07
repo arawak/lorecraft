@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -103,14 +104,14 @@ func TestRun_BasicIngestion(t *testing.T) {
 	if !client.ensureCalled {
 		t.Fatalf("expected ensure indexes")
 	}
-	if len(client.entities) != 2 {
-		t.Fatalf("expected 2 entities, got %d", len(client.entities))
+	if len(client.entities) != 3 {
+		t.Fatalf("expected 3 entities, got %d", len(client.entities))
 	}
 	if len(client.relationships) == 0 {
 		t.Fatalf("expected relationships")
 	}
-	if result.NodesUpserted != 2 {
-		t.Fatalf("expected 2 nodes upserted, got %d", result.NodesUpserted)
+	if result.NodesUpserted != 3 {
+		t.Fatalf("expected 3 nodes upserted, got %d", result.NodesUpserted)
 	}
 }
 
@@ -246,6 +247,47 @@ func TestRun_IncrementalSkip(t *testing.T) {
 		if rel.fromName == "Test NPC" {
 			t.Fatalf("expected relationships from Test NPC to be skipped")
 		}
+	}
+}
+
+func TestRun_EventConsequences(t *testing.T) {
+	cfg := testProjectConfig(t)
+	schema := testSchema(t)
+	client := &mockGraphClient{}
+
+	_, err := Run(context.Background(), cfg, schema, client, Options{Full: true})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	var found *graph.EntityInput
+	for i := range client.entities {
+		if client.entities[i].Name == "Test Event" {
+			found = &client.entities[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected Test Event entity")
+	}
+
+	payload, ok := found.Properties["consequences_json"].(string)
+	if !ok || payload == "" {
+		t.Fatalf("expected consequences_json property")
+	}
+
+	var got []Consequence
+	if err := json.Unmarshal([]byte(payload), &got); err != nil {
+		t.Fatalf("unmarshal consequences: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 consequences, got %d", len(got))
+	}
+	if got[0].Entity != "Test NPC" || got[0].Property != "status" || got[0].Value != "missing" {
+		t.Fatalf("unexpected consequence 0: %#v", got[0])
+	}
+	if got[1].Entity != "The Watch" || got[1].Property != "members" || got[1].Add != "Test NPC" {
+		t.Fatalf("unexpected consequence 1: %#v", got[1])
 	}
 }
 

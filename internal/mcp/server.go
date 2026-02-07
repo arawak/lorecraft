@@ -14,6 +14,8 @@ type GraphQuerier interface {
 	GetRelationships(ctx context.Context, name, relType, direction string, depth int) ([]graph.Relationship, error)
 	ListEntities(ctx context.Context, entityType, layer, tag string) ([]graph.EntitySummary, error)
 	Search(ctx context.Context, query, layer, entityType string) ([]graph.SearchResult, error)
+	GetCurrentState(ctx context.Context, name, layer string) (*graph.CurrentState, error)
+	GetTimeline(ctx context.Context, layer, entity string, fromSession, toSession int) ([]graph.Event, error)
 }
 
 type Server struct {

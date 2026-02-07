@@ -17,6 +17,10 @@ type mockGraphQuerier struct {
 	listErr             error
 	relationshipsResult []graph.Relationship
 	relationshipsErr    error
+	currentStateResult  *graph.CurrentState
+	currentStateErr     error
+	timelineResult      []graph.Event
+	timelineErr         error
 
 	lastGetEntityName      string
 	lastGetEntityType      string
@@ -30,6 +34,12 @@ type mockGraphQuerier struct {
 	lastRelationshipsType  string
 	lastRelationshipsDir   string
 	lastRelationshipsDepth int
+	lastTimelineLayer      string
+	lastTimelineEntity     string
+	lastTimelineFrom       int
+	lastTimelineTo         int
+	lastCurrentStateName   string
+	lastCurrentStateLayer  string
 }
 
 func (m *mockGraphQuerier) GetEntity(ctx context.Context, name, entityType string) (*graph.Entity, error) {
@@ -58,6 +68,20 @@ func (m *mockGraphQuerier) Search(ctx context.Context, query, layer, entityType 
 	m.lastSearchLayer = layer
 	m.lastSearchType = entityType
 	return m.searchResult, m.searchErr
+}
+
+func (m *mockGraphQuerier) GetCurrentState(ctx context.Context, name, layer string) (*graph.CurrentState, error) {
+	m.lastCurrentStateName = name
+	m.lastCurrentStateLayer = layer
+	return m.currentStateResult, m.currentStateErr
+}
+
+func (m *mockGraphQuerier) GetTimeline(ctx context.Context, layer, entity string, fromSession, toSession int) ([]graph.Event, error) {
+	m.lastTimelineLayer = layer
+	m.lastTimelineEntity = entity
+	m.lastTimelineFrom = fromSession
+	m.lastTimelineTo = toSession
+	return m.timelineResult, m.timelineErr
 }
 
 func TestGetEntity_NotFound(t *testing.T) {
@@ -155,5 +179,81 @@ func TestGetSchema(t *testing.T) {
 	}
 	if output.Version != 1 || len(output.EntityTypes) != 1 {
 		t.Fatalf("unexpected schema output: %+v", output)
+	}
+}
+
+func TestGetCurrentState(t *testing.T) {
+	graphMock := &mockGraphQuerier{
+		currentStateResult: &graph.CurrentState{
+			BaseProperties:    map[string]any{"status": "intact"},
+			CurrentProperties: map[string]any{"status": "damaged"},
+			Events: []graph.Event{{
+				Name:    "Storm Surge",
+				Layer:   "campaign",
+				Session: 1,
+				Consequences: []graph.Consequence{{
+					Entity:   "Westport",
+					Property: "status",
+					Value:    "damaged",
+				}},
+			}},
+		},
+	}
+	server := NewServer(&config.Schema{Version: 1}, graphMock)
+
+	_, output, err := server.handleGetCurrentState(context.Background(), nil, GetCurrentStateInput{Name: "Westport", Layer: "campaign"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output.CurrentProperties["status"] != "damaged" {
+		t.Fatalf("unexpected current state output: %+v", output)
+	}
+	if graphMock.lastCurrentStateName != "Westport" || graphMock.lastCurrentStateLayer != "campaign" {
+		t.Fatalf("unexpected current state params")
+	}
+}
+
+func TestGetTimeline(t *testing.T) {
+	graphMock := &mockGraphQuerier{
+		timelineResult: []graph.Event{{Name: "Storm Surge", Layer: "campaign", Session: 1}},
+	}
+	server := NewServer(&config.Schema{Version: 1}, graphMock)
+
+	_, output, err := server.handleGetTimeline(context.Background(), nil, GetTimelineInput{Layer: "campaign", Entity: "Westport", FromSession: 1, ToSession: 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(output.Events) != 1 || output.Events[0].Name != "Storm Surge" {
+		t.Fatalf("unexpected timeline output: %+v", output)
+	}
+	if graphMock.lastTimelineLayer != "campaign" || graphMock.lastTimelineEntity != "Westport" || graphMock.lastTimelineFrom != 1 || graphMock.lastTimelineTo != 2 {
+		t.Fatalf("unexpected timeline params")
+	}
+}
+
+func TestCheckConsistency(t *testing.T) {
+	graphMock := &mockGraphQuerier{
+		entityResult: &graph.Entity{Name: "Westport", EntityType: "settlement", Layer: "setting"},
+		relationshipsResult: []graph.Relationship{{
+			From: graph.EntityRef{Name: "Westport", EntityType: "settlement", Layer: "setting"},
+			To:   graph.EntityRef{Name: "The Westlands", EntityType: "region", Layer: "setting"},
+			Type: "PART_OF",
+		}},
+		timelineResult: []graph.Event{{Name: "Storm Surge", Layer: "campaign", Session: 1}},
+	}
+	server := NewServer(&config.Schema{Version: 1}, graphMock)
+
+	_, output, err := server.handleCheckConsistency(context.Background(), nil, CheckConsistencyInput{Name: "Westport", Layer: "campaign", Depth: 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output.Entity.Name != "Westport" {
+		t.Fatalf("unexpected entity output: %+v", output.Entity)
+	}
+	if len(output.Relationships) != 1 || output.Relationships[0].Type != "PART_OF" {
+		t.Fatalf("unexpected relationships output: %+v", output.Relationships)
+	}
+	if len(output.Events) != 1 || output.Events[0].Name != "Storm Surge" {
+		t.Fatalf("unexpected events output: %+v", output.Events)
 	}
 }

@@ -15,6 +15,7 @@ func main() {
 	root.AddCommand(serveCmd())
 	root.AddCommand(validateCmd())
 	root.AddCommand(queryCmd())
+	root.AddCommand(initCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

@@ -108,8 +108,8 @@ func TestGetCurrentState(t *testing.T) {
 		t.Fatalf("expected current status damaged, got %v", state.CurrentProperties["status"])
 	}
 
-	tags, ok := state.CurrentProperties["features"].([]string)
-	if !ok || len(tags) != 2 {
+	tags := toStringList(state.CurrentProperties["features"])
+	if len(tags) != 2 {
 		t.Fatalf("expected features list, got %#v", state.CurrentProperties["features"])
 	}
 	if tags[1] != "rebuilt" {
@@ -231,5 +231,22 @@ func writeTempConfig(t *testing.T) func() {
 	}
 	return func() {
 		_ = os.Chdir(cwd)
+	}
+}
+
+func toStringList(value any) []string {
+	switch v := value.(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }

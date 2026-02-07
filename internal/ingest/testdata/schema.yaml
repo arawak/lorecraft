@@ -12,6 +12,10 @@ entity_types:
     properties:
       - { name: faction_type, type: string }
 
+  - name: event
+    properties:
+      - { name: session, type: integer }
+
 relationship_types:
   - { name: MEMBER_OF }
   - { name: RELATED_TO, symmetric: true }
