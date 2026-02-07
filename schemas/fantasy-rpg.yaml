@@ -1,0 +1,70 @@
+version: 1
+
+entity_types:
+  - name: region
+    properties:
+      - { name: climate, type: string }
+      - { name: terrain, type: string }
+      - { name: population, type: string }
+    field_mappings:
+      - { field: parent_region, relationship: PART_OF, target_type: [region] }
+
+  - name: settlement
+    properties:
+      - { name: size, type: enum, values: [hamlet, village, town, city] }
+      - { name: government, type: string }
+    field_mappings:
+      - { field: region, relationship: PART_OF, target_type: [region] }
+
+  - name: npc
+    properties:
+      - { name: role, type: string }
+      - { name: status, type: enum, values: [alive, dead, unknown], default: alive }
+      - { name: visibility, type: enum, values: [player, gm], default: gm }
+    field_mappings:
+      - { field: location, relationship: LOCATED_IN, target_type: [settlement, region] }
+      - { field: faction, relationship: MEMBER_OF, target_type: [faction] }
+
+  - name: faction
+    properties:
+      - { name: faction_type, type: string }
+      - { name: influence, type: enum, values: [local, regional, continental] }
+    field_mappings:
+      - { field: operates_in, relationship: OPERATES_IN, target_type: [settlement, region] }
+
+  - name: lore
+    properties:
+      - { name: topic, type: string }
+
+  - name: event
+    properties:
+      - { name: session, type: integer }
+      - { name: date_in_world, type: string }
+    field_mappings:
+      - { field: participants, relationship: INVOLVES, target_type: [npc, faction] }
+      - { field: location, relationship: OCCURS_IN, target_type: [settlement, region] }
+      - { field: affects, relationship: AFFECTS }
+
+  - name: rumour
+    properties:
+      - { name: verified, type: enum, values: [true, false, unknown], default: unknown }
+      - { name: source_npc, type: string }
+    field_mappings:
+      - { field: about, relationship: ABOUT }
+
+relationship_types:
+  - { name: PART_OF, inverse: CONTAINS }
+  - { name: LOCATED_IN, inverse: HAS_PRESENT }
+  - { name: MEMBER_OF, inverse: HAS_MEMBER }
+  - { name: OPERATES_IN, inverse: HAS_FACTION }
+  - { name: ALLIED_WITH, symmetric: true }
+  - { name: HOSTILE_TO, symmetric: true }
+  - { name: GOVERNS, inverse: GOVERNED_BY }
+  - { name: KNOWS, symmetric: true }
+  - { name: RELATED_TO, symmetric: true }
+  - { name: AFFECTS, inverse: AFFECTED_BY }
+  - { name: INVOLVES, inverse: INVOLVED_IN }
+  - { name: OCCURS_IN, inverse: HAS_EVENT }
+  - { name: TRADES_WITH, symmetric: true }
+  - { name: CONTROLS, inverse: CONTROLLED_BY }
+  - { name: ABOUT, inverse: SUBJECT_OF }

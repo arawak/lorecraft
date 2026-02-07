@@ -31,5 +31,9 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
+## Project content (user-specific)
+lorecraft.yaml
+schema.yaml
+lore/
 
 lorecraft
