@@ -1,0 +1,17 @@
+project: test-project
+version: 1
+
+neo4j:
+  uri: bolt://localhost:7687
+  username: neo4j
+  password: changeme
+  database: neo4j
+
+layers:
+  - name: setting
+    paths:
+      - ./lore/
+    canonical: true
+
+exclude:
+  - ./assets/

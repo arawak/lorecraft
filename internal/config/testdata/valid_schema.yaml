@@ -1,0 +1,23 @@
+version: 1
+
+entity_types:
+  - name: npc
+    properties:
+      - { name: role, type: string }
+      - { name: status, type: enum, values: [alive, dead] }
+    field_mappings:
+      - { field: faction, relationship: MEMBER_OF, target_type: [faction] }
+
+  - name: faction
+    properties:
+      - { name: influence, type: string }
+    field_mappings:
+      - { field: operates_in, relationship: OPERATES_IN, target_type: [region] }
+
+  - name: region
+    properties:
+      - { name: climate, type: string }
+
+relationship_types:
+  - { name: MEMBER_OF, inverse: HAS_MEMBER }
+  - { name: OPERATES_IN, inverse: HAS_FACTION }

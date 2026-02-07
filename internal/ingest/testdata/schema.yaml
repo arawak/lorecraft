@@ -1,0 +1,17 @@
+version: 1
+
+entity_types:
+  - name: npc
+    properties:
+      - { name: role, type: string }
+      - { name: status, type: string }
+    field_mappings:
+      - { field: faction, relationship: MEMBER_OF, target_type: [faction] }
+
+  - name: faction
+    properties:
+      - { name: faction_type, type: string }
+
+relationship_types:
+  - { name: MEMBER_OF }
+  - { name: RELATED_TO, symmetric: true }
