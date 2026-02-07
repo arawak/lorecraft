@@ -23,12 +23,16 @@ type Result struct {
 	Errors        []error
 }
 
+type Options struct {
+	Full bool
+}
+
 type processedDoc struct {
 	doc   *parser.Document
 	layer config.Layer
 }
 
-func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, client GraphClient) (*Result, error) {
+func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, client GraphClient, options Options) (*Result, error) {
 	if err := client.EnsureIndexes(ctx, schema); err != nil {
 		return nil, fmt.Errorf("ensure indexes: %w", err)
 	}
@@ -38,6 +42,15 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 	layerFiles := make(map[string][]string)
 
 	for _, layer := range cfg.Layers {
+		var existingHashes map[string]string
+		if !options.Full {
+			var err error
+			existingHashes, err = client.GetLayerHashes(ctx, layer.Name)
+			if err != nil {
+				return nil, fmt.Errorf("get layer hashes for %s: %w", layer.Name, err)
+			}
+		}
+
 		files, err := walkMarkdownFiles(layer.Paths, cfg.Exclude)
 		if err != nil {
 			return nil, fmt.Errorf("walking files for layer %s: %w", layer.Name, err)
@@ -45,6 +58,18 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 		layerFiles[layer.Name] = files
 
 		for _, path := range files {
+			hash, err := computeHash(path)
+			if err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("hashing %s: %w", path, err))
+				continue
+			}
+			if !options.Full {
+				if existing, ok := existingHashes[path]; ok && existing == hash {
+					result.FilesSkipped++
+					continue
+				}
+			}
+
 			doc, err := parser.ParseFile(path)
 			if err != nil {
 				if err == parser.ErrNoFrontmatter || err == parser.ErrMissingType {
@@ -57,12 +82,6 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 
 			if !schema.IsValidEntityType(doc.EntityType) {
 				result.FilesSkipped++
-				continue
-			}
-
-			hash, err := computeHash(path)
-			if err != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("hashing %s: %w", path, err))
 				continue
 			}
 

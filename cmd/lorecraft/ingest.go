@@ -12,12 +12,15 @@ import (
 	"lorecraft/internal/ingest"
 )
 
+var ingestFull bool
+
 func ingestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ingest",
 		Short: "Synchronise the graph with markdown source files",
 		RunE:  runIngest,
 	}
+	cmd.Flags().BoolVar(&ingestFull, "full", false, "Force full re-ingestion (ignore incremental hashes)")
 	return cmd
 }
 
@@ -40,7 +43,7 @@ func runIngest(cmd *cobra.Command, args []string) error {
 	}
 	defer client.Close(ctx)
 
-	result, err := ingest.Run(ctx, cfg, schema, client)
+	result, err := ingest.Run(ctx, cfg, schema, client, ingest.Options{Full: ingestFull})
 	if err != nil {
 		return err
 	}

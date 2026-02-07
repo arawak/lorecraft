@@ -26,6 +26,7 @@ type mockGraphClient struct {
 	}
 	ensureCalled bool
 	failUpsert   bool
+	layerHashes  map[string]map[string]string
 }
 
 func (m *mockGraphClient) UpsertEntity(ctx context.Context, e graph.EntityInput) error {
@@ -60,12 +61,22 @@ func (m *mockGraphClient) EnsureIndexes(ctx context.Context, schema *config.Sche
 	return nil
 }
 
+func (m *mockGraphClient) GetLayerHashes(ctx context.Context, layer string) (map[string]string, error) {
+	if m.layerHashes == nil {
+		return map[string]string{}, nil
+	}
+	if hashes, ok := m.layerHashes[layer]; ok {
+		return hashes, nil
+	}
+	return map[string]string{}, nil
+}
+
 func TestRun_BasicIngestion(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
 	client := &mockGraphClient{}
 
-	result, err := Run(context.Background(), cfg, schema, client)
+	result, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -89,7 +100,7 @@ func TestRun_SkipsUnknownTypes(t *testing.T) {
 	schema := testSchema(t)
 	client := &mockGraphClient{}
 
-	result, err := Run(context.Background(), cfg, schema, client)
+	result, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -104,7 +115,7 @@ func TestRun_SkipsNoFrontmatter(t *testing.T) {
 	schema := testSchema(t)
 	client := &mockGraphClient{}
 
-	result, err := Run(context.Background(), cfg, schema, client)
+	result, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -119,7 +130,7 @@ func TestRun_RelatedField(t *testing.T) {
 	schema := testSchema(t)
 	client := &mockGraphClient{}
 
-	_, err := Run(context.Background(), cfg, schema, client)
+	_, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -140,7 +151,7 @@ func TestRun_FieldMappingResolution(t *testing.T) {
 	schema := testSchema(t)
 	client := &mockGraphClient{}
 
-	_, err := Run(context.Background(), cfg, schema, client)
+	_, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -162,7 +173,7 @@ func TestRun_ContinuesOnError(t *testing.T) {
 	schema := testSchema(t)
 	client := &mockGraphClient{failUpsert: true}
 
-	result, err := Run(context.Background(), cfg, schema, client)
+	result, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -176,7 +187,7 @@ func TestRun_RemoveStaleNodes(t *testing.T) {
 	schema := testSchema(t)
 	client := &mockGraphClient{}
 
-	_, err := Run(context.Background(), cfg, schema, client)
+	_, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -185,6 +196,68 @@ func TestRun_RemoveStaleNodes(t *testing.T) {
 	}
 	if len(client.removeCalls[0].files) == 0 {
 		t.Fatalf("expected file list")
+	}
+}
+
+func TestRun_IncrementalSkip(t *testing.T) {
+	cfg := testProjectConfig(t)
+	schema := testSchema(t)
+	path := filepath.Join("testdata", "lore", "valid_npc.md")
+	hash, err := computeHash(path)
+	if err != nil {
+		t.Fatalf("compute hash: %v", err)
+	}
+	client := &mockGraphClient{
+		layerHashes: map[string]map[string]string{
+			"setting": {path: hash},
+		},
+	}
+
+	_, err = Run(context.Background(), cfg, schema, client, Options{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	for _, entity := range client.entities {
+		if entity.Name == "Test NPC" {
+			t.Fatalf("expected Test NPC to be skipped")
+		}
+	}
+	for _, rel := range client.relationships {
+		if rel.fromName == "Test NPC" {
+			t.Fatalf("expected relationships from Test NPC to be skipped")
+		}
+	}
+}
+
+func TestRun_FullIngestionOverridesHashes(t *testing.T) {
+	cfg := testProjectConfig(t)
+	schema := testSchema(t)
+	path := filepath.Join("testdata", "lore", "valid_npc.md")
+	hash, err := computeHash(path)
+	if err != nil {
+		t.Fatalf("compute hash: %v", err)
+	}
+	client := &mockGraphClient{
+		layerHashes: map[string]map[string]string{
+			"setting": {path: hash},
+		},
+	}
+
+	_, err = Run(context.Background(), cfg, schema, client, Options{Full: true})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	found := false
+	for _, entity := range client.entities {
+		if entity.Name == "Test NPC" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected Test NPC to be ingested in full mode")
 	}
 }
 

@@ -12,4 +12,5 @@ type GraphClient interface {
 	UpsertRelationship(ctx context.Context, fromName, fromLayer, toName, toLayer, relType string) error
 	RemoveStaleNodes(ctx context.Context, layer string, currentSourceFiles []string) (int64, error)
 	EnsureIndexes(ctx context.Context, schema *config.Schema) error
+	GetLayerHashes(ctx context.Context, layer string) (map[string]string, error)
 }
