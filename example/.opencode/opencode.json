@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "lorecraft": {
+      "type": "local",
+      "command": [
+        "../bin/lorecraft",
+        "serve"
+      ],
+      "enabled": true
+    }
+  }
+}

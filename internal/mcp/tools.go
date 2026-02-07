@@ -325,6 +325,7 @@ func (s *Server) handleCheckConsistency(ctx context.Context, req *sdk.CallToolRe
 	if err != nil {
 		return nil, CheckConsistencyOutput{}, err
 	}
+	rels = dedupeRelationships(rels)
 	events, err := s.graph.GetTimeline(ctx, input.Layer, input.Name, 0, 0)
 	if err != nil {
 		return nil, CheckConsistencyOutput{}, err
@@ -493,6 +494,35 @@ func relationshipOutputsFromGraph(rels []graph.Relationship) []RelationshipOutpu
 		output = append(output, relationshipOutputFromGraph(rel))
 	}
 	return output
+}
+
+func dedupeRelationships(rels []graph.Relationship) []graph.Relationship {
+	if len(rels) == 0 {
+		return rels
+	}
+	seen := make(map[string]graph.Relationship, len(rels))
+	order := make([]string, 0, len(rels))
+	for _, rel := range rels {
+		key := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d",
+			rel.From.Layer,
+			rel.From.Name,
+			rel.To.Layer,
+			rel.To.Name,
+			rel.Type,
+			rel.Direction,
+			rel.Depth,
+		)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = rel
+		order = append(order, key)
+	}
+	unique := make([]graph.Relationship, 0, len(order))
+	for _, key := range order {
+		unique = append(unique, seen[key])
+	}
+	return unique
 }
 
 func copyMap(input map[string]any) map[string]any {

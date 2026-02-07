@@ -61,14 +61,30 @@ cd lorecraft
 make neo4j-up
 ```
 
-Wait a few seconds for Neo4j to start, then copy the bundled schema template
-and create a project config:
+Wait a few seconds for Neo4j to start. The repo includes a working example
+project under `example/`.
+
+Build and run the example:
 
 ```sh
-cp schemas/fantasy-rpg.yaml schema.yaml
+make build
+cd example
+../bin/lorecraft ingest
+../bin/lorecraft validate
 ```
 
-Create `lorecraft.yaml` in the project root:
+Open the Neo4j browser at http://localhost:7474 (credentials: `neo4j`/`changeme`)
+to see your graph.
+
+To start your own project from scratch, create a new directory and copy the
+schema template:
+
+```sh
+mkdir -p my-setting
+cp schemas/fantasy-rpg.yaml my-setting/schema.yaml
+```
+
+Create `lorecraft.yaml` inside `my-setting/`:
 
 ```yaml
 project: my-setting
@@ -87,41 +103,18 @@ layers:
     canonical: true
 ```
 
-Create a `lore/` directory and add some content:
+Then add content under `my-setting/lore/` and run lorecraft from that
+directory:
 
 ```sh
-mkdir -p lore
+cd my-setting
+../bin/lorecraft ingest
 ```
-
-Write a file like `lore/westport.md`:
-
-```markdown
----
-title: Westport
-type: settlement
-size: city
-government: Merchant oligarchy
-region: The Westlands
-tags: [port, trade-hub]
----
-
-Westport is the largest port city in the Westlands.
-```
-
-Build and run:
-
-```sh
-make build
-./bin/lorecraft ingest
-./bin/lorecraft validate
-```
-
-Open the Neo4j browser at http://localhost:7474 (credentials: `neo4j`/`changeme`)
-to see your graph.
 
 ## Configuration
 
-Lorecraft uses two configuration files in the project root.
+Lorecraft uses two configuration files in the project directory (the directory
+where you run `lorecraft`).
 
 ### lorecraft.yaml
 
@@ -310,7 +303,7 @@ server communicates over stdio and provides five tools:
 - `get_schema` -- return the full schema definition
 
 To configure lorecraft as an MCP server for OpenCode, create
-`.opencode/opencode.json` in your project root:
+`.opencode/opencode.json` in your project directory:
 
 ```json
 {
@@ -318,7 +311,7 @@ To configure lorecraft as an MCP server for OpenCode, create
   "mcp": {
     "lorecraft": {
       "type": "local",
-      "command": ["./lorecraft", "serve"],
+      "command": ["../bin/lorecraft", "serve"],
       "enabled": true
     }
   }
@@ -327,6 +320,7 @@ To configure lorecraft as an MCP server for OpenCode, create
 
 Other MCP-compatible clients (Claude Desktop, etc.) can use the same
 `lorecraft serve` command with their own configuration format.
+If your binary lives elsewhere, adjust the command path accordingly.
 
 ## Development
 

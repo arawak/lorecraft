@@ -1,0 +1,24 @@
+project: westlands
+version: 1
+
+neo4j:
+  uri: bolt://localhost:7687
+  username: neo4j
+  password: changeme
+  database: neo4j
+
+layers:
+  - name: setting
+    paths:
+      - ./lore/
+    canonical: true
+
+  # Example ephemeral layer (uncomment when starting a campaign):
+  # - name: campaign-shadow-war
+  #   paths:
+  #     - ./campaigns/shadow-war/
+  #   canonical: false
+  #   depends_on: [setting]
+
+exclude:
+  - ./assets/

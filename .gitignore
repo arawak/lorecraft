@@ -32,9 +32,8 @@ go.work.sum
 Thumbs.db
 
 ## Project content (user-specific)
-lorecraft.yaml
-schema.yaml
-lore/
+.opencode/
+!example/.opencode/
+!example/.opencode/opencode.json
 
 lorecraft
-.opencode
