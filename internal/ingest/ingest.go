@@ -116,7 +116,19 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 					if target == "" {
 						continue
 					}
-					if err := client.UpsertRelationship(ctx, item.doc.Title, item.layer.Name, target, item.layer.Name, mapping.Relationship); err != nil {
+					targetLayer := item.layer.Name
+					if len(item.layer.DependsOn) > 0 {
+						layers := append([]string{item.layer.Name}, item.layer.DependsOn...)
+						layerName, err := client.FindEntityLayer(ctx, target, layers)
+						if err != nil {
+							result.Errors = append(result.Errors, fmt.Errorf("finding layer for %s: %w", target, err))
+							continue
+						}
+						if layerName != "" {
+							targetLayer = layerName
+						}
+					}
+					if err := client.UpsertRelationship(ctx, item.doc.Title, item.layer.Name, target, targetLayer, mapping.Relationship); err != nil {
 						result.Errors = append(result.Errors, fmt.Errorf("upserting relationship for %s: %w", item.doc.Title, err))
 						continue
 					}
@@ -130,7 +142,19 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 				if target == "" {
 					continue
 				}
-				if err := client.UpsertRelationship(ctx, item.doc.Title, item.layer.Name, target, item.layer.Name, "RELATED_TO"); err != nil {
+				targetLayer := item.layer.Name
+				if len(item.layer.DependsOn) > 0 {
+					layers := append([]string{item.layer.Name}, item.layer.DependsOn...)
+					layerName, err := client.FindEntityLayer(ctx, target, layers)
+					if err != nil {
+						result.Errors = append(result.Errors, fmt.Errorf("finding layer for %s: %w", target, err))
+						continue
+					}
+					if layerName != "" {
+						targetLayer = layerName
+					}
+				}
+				if err := client.UpsertRelationship(ctx, item.doc.Title, item.layer.Name, target, targetLayer, "RELATED_TO"); err != nil {
 					result.Errors = append(result.Errors, fmt.Errorf("upserting related for %s: %w", item.doc.Title, err))
 					continue
 				}

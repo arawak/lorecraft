@@ -13,6 +13,8 @@ func main() {
 	}
 	root.AddCommand(ingestCmd())
 	root.AddCommand(serveCmd())
+	root.AddCommand(validateCmd())
+	root.AddCommand(queryCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

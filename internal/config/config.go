@@ -63,6 +63,7 @@ func validateProjectConfig(cfg *ProjectConfig) error {
 	}
 
 	seen := make(map[string]struct{})
+	layersByName := make(map[string]Layer)
 	for i, layer := range cfg.Layers {
 		if strings.TrimSpace(layer.Name) == "" {
 			return fmt.Errorf("layer %d name is required", i)
@@ -75,6 +76,56 @@ func validateProjectConfig(cfg *ProjectConfig) error {
 			return fmt.Errorf("duplicate layer name: %s", layer.Name)
 		}
 		seen[key] = struct{}{}
+		layersByName[key] = layer
+	}
+
+	for _, layer := range cfg.Layers {
+		for _, dep := range layer.DependsOn {
+			depName := strings.TrimSpace(dep)
+			if depName == "" {
+				continue
+			}
+			key := strings.ToLower(depName)
+			depLayer, ok := layersByName[key]
+			if !ok {
+				return fmt.Errorf("layer %s depends_on unknown layer %s", layer.Name, depName)
+			}
+			if layer.Canonical && !depLayer.Canonical {
+				return fmt.Errorf("canonical layer %s cannot depend on non-canonical layer %s", layer.Name, depName)
+			}
+		}
+	}
+
+	visiting := make(map[string]bool)
+	visited := make(map[string]bool)
+	var visit func(name string) error
+	visit = func(name string) error {
+		if visiting[name] {
+			return fmt.Errorf("dependency cycle detected at layer %s", layersByName[name].Name)
+		}
+		if visited[name] {
+			return nil
+		}
+		visiting[name] = true
+		layer := layersByName[name]
+		for _, dep := range layer.DependsOn {
+			depName := strings.TrimSpace(dep)
+			if depName == "" {
+				continue
+			}
+			if err := visit(strings.ToLower(depName)); err != nil {
+				return err
+			}
+		}
+		visiting[name] = false
+		visited[name] = true
+		return nil
+	}
+
+	for name := range layersByName {
+		if err := visit(name); err != nil {
+			return err
+		}
 	}
 
 	return nil

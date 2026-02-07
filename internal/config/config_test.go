@@ -59,6 +59,27 @@ func TestLoadProjectConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("depends_on missing layer", func(t *testing.T) {
+		path := writeTempConfig(t, "project: test\nversion: 1\nneo4j:\n  uri: bolt://localhost:7687\nlayers:\n  - name: setting\n    paths: [./lore]\n    canonical: true\n  - name: campaign\n    paths: [./campaign]\n    canonical: false\n    depends_on: [missing]\n")
+		if _, err := LoadProjectConfig(path); err == nil {
+			t.Fatalf("expected error")
+		}
+	})
+
+	t.Run("depends_on cycle", func(t *testing.T) {
+		path := writeTempConfig(t, "project: test\nversion: 1\nneo4j:\n  uri: bolt://localhost:7687\nlayers:\n  - name: setting\n    paths: [./lore]\n    canonical: false\n    depends_on: [campaign]\n  - name: campaign\n    paths: [./campaign]\n    canonical: false\n    depends_on: [setting]\n")
+		if _, err := LoadProjectConfig(path); err == nil {
+			t.Fatalf("expected error")
+		}
+	})
+
+	t.Run("canonical depends on non-canonical", func(t *testing.T) {
+		path := writeTempConfig(t, "project: test\nversion: 1\nneo4j:\n  uri: bolt://localhost:7687\nlayers:\n  - name: setting\n    paths: [./lore]\n    canonical: true\n    depends_on: [campaign]\n  - name: campaign\n    paths: [./campaign]\n    canonical: false\n")
+		if _, err := LoadProjectConfig(path); err == nil {
+			t.Fatalf("expected error")
+		}
+	})
+
 	t.Run("file not found", func(t *testing.T) {
 		if _, err := LoadProjectConfig(filepath.Join(t.TempDir(), "missing.yaml")); err == nil {
 			t.Fatalf("expected error")

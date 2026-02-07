@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"lorecraft/internal/config"
@@ -27,6 +28,7 @@ type mockGraphClient struct {
 	ensureCalled bool
 	failUpsert   bool
 	layerHashes  map[string]map[string]string
+	entityLayers map[string]map[string]struct{}
 }
 
 func (m *mockGraphClient) UpsertEntity(ctx context.Context, e graph.EntityInput) error {
@@ -69,6 +71,23 @@ func (m *mockGraphClient) GetLayerHashes(ctx context.Context, layer string) (map
 		return hashes, nil
 	}
 	return map[string]string{}, nil
+}
+
+func (m *mockGraphClient) FindEntityLayer(ctx context.Context, name string, layers []string) (string, error) {
+	if m.entityLayers == nil {
+		return "", nil
+	}
+	key := strings.ToLower(name)
+	available := m.entityLayers[key]
+	if available == nil {
+		return "", nil
+	}
+	for _, layer := range layers {
+		if _, ok := available[layer]; ok {
+			return layer, nil
+		}
+	}
+	return "", nil
 }
 
 func TestRun_BasicIngestion(t *testing.T) {
@@ -258,6 +277,44 @@ func TestRun_FullIngestionOverridesHashes(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected Test NPC to be ingested in full mode")
+	}
+}
+
+func TestRun_DependsOnResolution(t *testing.T) {
+	settingDir := t.TempDir()
+	cfg := &config.ProjectConfig{
+		Project: "test",
+		Version: 1,
+		Neo4j:   config.Neo4jConfig{URI: "bolt://localhost:7687"},
+		Layers: []config.Layer{
+			{Name: "setting", Paths: []string{settingDir}, Canonical: true},
+			{Name: "campaign", Paths: []string{filepath.Join("testdata", "lore")}, Canonical: false, DependsOn: []string{"setting"}},
+		},
+	}
+	schema := testSchema(t)
+	client := &mockGraphClient{
+		entityLayers: map[string]map[string]struct{}{
+			strings.ToLower("The Watch"): {"setting": {}},
+		},
+	}
+
+	_, err := Run(context.Background(), cfg, schema, client, Options{Full: true})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	found := false
+	for _, rel := range client.relationships {
+		if rel.relType == "MEMBER_OF" && rel.fromName == "Test NPC" {
+			if rel.toLayer != "setting" {
+				t.Fatalf("expected toLayer setting, got %q", rel.toLayer)
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected MEMBER_OF relationship")
 	}
 }
 

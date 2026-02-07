@@ -13,4 +13,5 @@ type GraphClient interface {
 	RemoveStaleNodes(ctx context.Context, layer string, currentSourceFiles []string) (int64, error)
 	EnsureIndexes(ctx context.Context, schema *config.Schema) error
 	GetLayerHashes(ctx context.Context, layer string) (map[string]string, error)
+	FindEntityLayer(ctx context.Context, name string, layers []string) (string, error)
 }

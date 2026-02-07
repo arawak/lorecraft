@@ -24,10 +24,11 @@ type EntityType struct {
 }
 
 type Property struct {
-	Name    string   `yaml:"name"`
-	Type    string   `yaml:"type"`
-	Values  []string `yaml:"values"`
-	Default string   `yaml:"default"`
+	Name     string   `yaml:"name"`
+	Type     string   `yaml:"type"`
+	Values   []string `yaml:"values"`
+	Default  string   `yaml:"default"`
+	Required bool     `yaml:"required"`
 }
 
 type FieldMapping struct {
