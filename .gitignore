@@ -1,0 +1,35 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+bin/
+dist/
+
+# Test output
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE/editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# Env files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+
+lorecraft
