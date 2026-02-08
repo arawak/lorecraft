@@ -366,10 +366,14 @@ func schemaOutputFromConfig(schema *config.Schema) SchemaOutput {
 			})
 		}
 		for _, mapping := range entityType.FieldMappings {
+			targetTypes := mapping.TargetType
+			if targetTypes == nil {
+				targetTypes = []string{}
+			}
 			entityOut.FieldMappings = append(entityOut.FieldMappings, FieldMappingOutput{
 				Field:        mapping.Field,
 				Relationship: mapping.Relationship,
-				TargetType:   mapping.TargetType,
+				TargetType:   targetTypes,
 			})
 		}
 		out.EntityTypes = append(out.EntityTypes, entityOut)

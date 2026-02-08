@@ -180,6 +180,12 @@ func TestGetSchema(t *testing.T) {
 	if output.Version != 1 || len(output.EntityTypes) != 1 {
 		t.Fatalf("unexpected schema output: %+v", output)
 	}
+	if len(output.EntityTypes[0].FieldMappings) != 1 {
+		t.Fatalf("unexpected field mappings output: %+v", output.EntityTypes[0].FieldMappings)
+	}
+	if output.EntityTypes[0].FieldMappings[0].TargetType == nil {
+		t.Fatalf("expected empty target_type slice, got nil")
+	}
 }
 
 func TestGetCurrentState(t *testing.T) {
