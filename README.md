@@ -68,10 +68,14 @@ Build and run the example:
 
 ```sh
 make build
+./bin/lorecraft --version
 cd example
 ../bin/lorecraft ingest
 ../bin/lorecraft validate
 ```
+
+If you want to use OpenCode with the example, open `example/` as your project
+root. The MCP config lives at `example/.opencode/opencode.json`.
 
 Open the Neo4j browser at http://localhost:7474 (credentials: `neo4j`/`changeme`)
 to see your graph.
@@ -274,6 +278,14 @@ lorecraft query search "bureau"
 lorecraft query search "port" --type settlement
 ```
 
+### query state
+
+Compute current state for an entity from campaign events.
+
+```sh
+lorecraft query state "Westport" --layer campaign-shadow-war
+```
+
 ### query cypher
 
 Execute a raw Cypher query against the graph.
@@ -291,16 +303,27 @@ Start the MCP server over stdio.
 lorecraft serve
 ```
 
+### init
+
+Scaffold a new project in the current directory.
+
+```sh
+lorecraft init --name my-setting
+```
+
 ## MCP server
 
 Lorecraft exposes the graph to AI agents via the Model Context Protocol. The
-server communicates over stdio and provides five tools:
+server communicates over stdio and provides these tools:
 
 - `search_lore` -- full-text search across entity names and tags
 - `get_entity` -- retrieve a single entity with all properties
 - `get_relationships` -- traverse relationships from an entity with configurable depth and direction
 - `list_entities` -- list entities filtered by type, layer, or tag
 - `get_schema` -- return the full schema definition
+- `get_current_state` -- compute current state for an entity in a campaign layer
+- `get_timeline` -- return ordered campaign events for a layer
+- `check_consistency` -- return entity, relationships, and events for review
 
 To configure lorecraft as an MCP server for OpenCode, create
 `.opencode/opencode.json` in your project directory:
