@@ -36,6 +36,6 @@ Thumbs.db
 !example/.opencode/
 !example/.opencode/opencode.json
 
-lorecraft
+/lorecraft
 
-!cmd/lorecraft/version.go
+!cmd/lorecraft/
