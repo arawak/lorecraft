@@ -2,6 +2,9 @@ BIN_DIR := bin
 BIN := $(BIN_DIR)/lorecraft
 GO := go
 
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS := -X main.version=$(VERSION)
+
 .PHONY: all build clean fmt vet test tidy neo4j-up neo4j-down neo4j-logs
 
 all: build
@@ -10,7 +13,7 @@ $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
 build: $(BIN_DIR)
-	$(GO) build -o $(BIN) ./cmd/lorecraft
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/lorecraft
 
 clean:
 	rm -rf $(BIN_DIR)

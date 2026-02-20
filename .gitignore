@@ -37,3 +37,5 @@ Thumbs.db
 !example/.opencode/opencode.json
 
 lorecraft
+
+!cmd/lorecraft/version.go
