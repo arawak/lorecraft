@@ -36,8 +36,8 @@ func parseConsequences(value any) ([]Consequence, error) {
 			return nil, fmt.Errorf("consequence %d missing entity or property", i)
 		}
 		consequence := Consequence{Entity: entity, Property: property}
-		if value, ok := entry["value"]; ok {
-			consequence.Value = value
+		if val, ok := entry["value"]; ok {
+			consequence.Value = val
 		}
 		if add, ok := entry["add"]; ok {
 			consequence.Add = add

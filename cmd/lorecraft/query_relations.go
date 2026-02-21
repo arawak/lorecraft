@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 )
 
 func queryRelationsCmd() *cobra.Command {
@@ -38,13 +37,13 @@ func runQueryRelations(cmd *cobra.Command, name, relType, direction string, dept
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	rels, err := client.GetRelationships(ctx, name, relType, direction, depth)
+	rels, err := db.GetRelationships(ctx, name, relType, direction, depth)
 	if err != nil {
 		return err
 	}

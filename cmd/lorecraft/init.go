@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"lorecraft/schemas"
 )
 
 func initCmd() *cobra.Command {
@@ -37,13 +38,13 @@ func runInit(projectName, template string) error {
 		return fmt.Errorf("%s already exists", schemaPath)
 	}
 
-	templatePath := filepath.Join("schemas", template+".yaml")
-	contents, err := os.ReadFile(templatePath)
+	templateFileName := template + ".yaml"
+	contents, err := schemas.FS.ReadFile(templateFileName)
 	if err != nil {
 		return fmt.Errorf("reading template %s: %w", template, err)
 	}
 
-	configContents := fmt.Sprintf("project: %s\nversion: 1\n\nneo4j:\n  uri: bolt://localhost:7687\n  username: neo4j\n  password: changeme\n  database: neo4j\n\nlayers:\n  - name: setting\n    paths:\n      - ./lore/\n    canonical: true\n\nexclude:\n  - ./assets/\n", projectName)
+	configContents := fmt.Sprintf("project: %s\nversion: 1\n\ndatabase:\n  dsn: \"postgres://lorecraft:changeme@localhost:5432/lorecraft?sslmode=disable\"\n\nlayers:\n  - name: setting\n    paths:\n      - ./lore/\n    canonical: true\n\nexclude:\n  - ./assets/\n", projectName)
 	if err := os.WriteFile(configPath, []byte(configContents), 0o600); err != nil {
 		return fmt.Errorf("writing %s: %w", configPath, err)
 	}

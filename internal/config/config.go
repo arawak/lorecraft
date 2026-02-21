@@ -9,18 +9,15 @@ import (
 )
 
 type ProjectConfig struct {
-	Project string      `yaml:"project"`
-	Version int         `yaml:"version"`
-	Neo4j   Neo4jConfig `yaml:"neo4j"`
-	Layers  []Layer     `yaml:"layers"`
-	Exclude []string    `yaml:"exclude"`
+	Project  string         `yaml:"project"`
+	Version  int            `yaml:"version"`
+	Database DatabaseConfig `yaml:"database"`
+	Layers   []Layer        `yaml:"layers"`
+	Exclude  []string       `yaml:"exclude"`
 }
 
-type Neo4jConfig struct {
-	URI      string `yaml:"uri"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	Database string `yaml:"database"`
+type DatabaseConfig struct {
+	DSN string `yaml:"dsn"`
 }
 
 type Layer struct {
@@ -55,8 +52,8 @@ func validateProjectConfig(cfg *ProjectConfig) error {
 	if cfg.Version != 1 {
 		return fmt.Errorf("unsupported version: %d", cfg.Version)
 	}
-	if strings.TrimSpace(cfg.Neo4j.URI) == "" {
-		return fmt.Errorf("neo4j uri is required")
+	if strings.TrimSpace(cfg.Database.DSN) == "" {
+		return fmt.Errorf("database dsn is required")
 	}
 	if len(cfg.Layers) == 0 {
 		return fmt.Errorf("at least one layer is required")

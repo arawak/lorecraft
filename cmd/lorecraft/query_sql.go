@@ -10,29 +10,28 @@ import (
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 )
 
-func queryCypherCmd() *cobra.Command {
+func querySQLCmd() *cobra.Command {
 	var paramPairs []string
 	cmd := &cobra.Command{
-		Use:   "cypher <query>",
-		Short: "Execute a raw Cypher query",
+		Use:   "sql <query>",
+		Short: "Execute a raw SQL query",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := strings.Join(args, " ")
-			params, err := parseParams(paramPairs)
+			params, err := parseParamPairs(paramPairs)
 			if err != nil {
 				return err
 			}
-			return runCypher(cmd, query, params)
+			return runSQL(cmd, query, params)
 		},
 	}
 	cmd.Flags().StringArrayVar(&paramPairs, "param", nil, "Query parameter as key=value (repeatable)")
 	return cmd
 }
 
-func runCypher(cmd *cobra.Command, query string, params map[string]any) error {
+func runSQL(cmd *cobra.Command, query string, params map[string]any) error {
 	ctx := context.Background()
 
 	cfg, err := config.LoadProjectConfig("lorecraft.yaml")
@@ -40,13 +39,13 @@ func runCypher(cmd *cobra.Command, query string, params map[string]any) error {
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	rows, err := client.RunCypher(ctx, query, params)
+	rows, err := db.RunSQL(ctx, query, params)
 	if err != nil {
 		return err
 	}
@@ -59,7 +58,7 @@ func runCypher(cmd *cobra.Command, query string, params map[string]any) error {
 	return nil
 }
 
-func parseParams(pairs []string) (map[string]any, error) {
+func parseParamPairs(pairs []string) (map[string]any, error) {
 	params := make(map[string]any)
 	for _, pair := range pairs {
 		if pair == "" {

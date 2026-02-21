@@ -7,23 +7,55 @@ import (
 	"testing"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
+	"lorecraft/internal/store"
 )
 
-type mockGraphValidator struct {
-	entities      []graph.EntitySummary
-	entityDetails map[string]*graph.Entity
-	placeholders  []graph.EntitySummary
-	orphans       []graph.EntitySummary
-	duplicates    []graph.EntitySummary
-	crossLayer    []graph.EntitySummary
+type mockStore struct {
+	entities      []store.EntitySummary
+	entityDetails map[string]*store.Entity
+	placeholders  []store.EntitySummary
+	orphans       []store.EntitySummary
+	duplicates    []store.EntitySummary
+	crossLayer    []store.EntitySummary
 }
 
-func (m *mockGraphValidator) ListEntities(ctx context.Context, entityType, layer, tag string) ([]graph.EntitySummary, error) {
+func (m *mockStore) Close(ctx context.Context) error { return nil }
+
+func (m *mockStore) EnsureSchema(ctx context.Context, schema *config.Schema) error { return nil }
+
+func (m *mockStore) UpsertEntity(ctx context.Context, e store.EntityInput) error { return nil }
+
+func (m *mockStore) UpsertRelationship(ctx context.Context, fromName, fromLayer, toName, toLayer, relType string) error {
+	return nil
+}
+
+func (m *mockStore) RemoveStaleNodes(ctx context.Context, layer string, currentSourceFiles []string) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockStore) GetLayerHashes(ctx context.Context, layer string) (map[string]string, error) {
+	return nil, nil
+}
+
+func (m *mockStore) FindEntityLayer(ctx context.Context, name string, layers []string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) ListEntities(ctx context.Context, entityType, layer, tag string) ([]store.EntitySummary, error) {
 	return m.entities, nil
 }
 
-func (m *mockGraphValidator) GetEntity(ctx context.Context, name, entityType string) (*graph.Entity, error) {
+func (m *mockStore) ListEntitiesWithProperties(ctx context.Context) ([]store.Entity, error) {
+	entities := make([]store.Entity, 0)
+	for _, summary := range m.entities {
+		if entity, ok := m.entityDetails[summary.Name+"|"+summary.EntityType]; ok {
+			entities = append(entities, *entity)
+		}
+	}
+	return entities, nil
+}
+
+func (m *mockStore) GetEntity(ctx context.Context, name, entityType string) (*store.Entity, error) {
 	if m.entityDetails == nil {
 		return nil, nil
 	}
@@ -34,20 +66,36 @@ func (m *mockGraphValidator) GetEntity(ctx context.Context, name, entityType str
 	return nil, nil
 }
 
-func (m *mockGraphValidator) ListDanglingPlaceholders(ctx context.Context) ([]graph.EntitySummary, error) {
+func (m *mockStore) GetRelationships(ctx context.Context, name, relType, direction string, depth int) ([]store.Relationship, error) {
+	return nil, nil
+}
+
+func (m *mockStore) Search(ctx context.Context, query, layer, entityType string) ([]store.SearchResult, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetCurrentState(ctx context.Context, name, layer string) (*store.CurrentState, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetTimeline(ctx context.Context, layer, entity string, fromSession, toSession int) ([]store.Event, error) {
+	return nil, nil
+}
+
+func (m *mockStore) ListDanglingPlaceholders(ctx context.Context) ([]store.EntitySummary, error) {
 	return m.placeholders, nil
 }
 
-func (m *mockGraphValidator) ListOrphanedEntities(ctx context.Context) ([]graph.EntitySummary, error) {
+func (m *mockStore) ListOrphanedEntities(ctx context.Context) ([]store.EntitySummary, error) {
 	return m.orphans, nil
 }
 
-func (m *mockGraphValidator) ListDuplicateNames(ctx context.Context) ([]graph.EntitySummary, error) {
-	return m.duplicates, nil
+func (m *mockStore) ListCrossLayerViolations(ctx context.Context) ([]store.EntitySummary, error) {
+	return m.crossLayer, nil
 }
 
-func (m *mockGraphValidator) ListCrossLayerViolations(ctx context.Context) ([]graph.EntitySummary, error) {
-	return m.crossLayer, nil
+func (m *mockStore) RunSQL(ctx context.Context, query string, params map[string]any) ([]map[string]any, error) {
+	return nil, nil
 }
 
 func TestRun_EnumViolation(t *testing.T) {
@@ -60,9 +108,9 @@ relationship_types:
   - name: RELATED_TO
 `)
 
-	validator := &mockGraphValidator{
-		entities: []graph.EntitySummary{{Name: "Test NPC", EntityType: "npc", Layer: "setting"}},
-		entityDetails: map[string]*graph.Entity{
+	validator := &mockStore{
+		entities: []store.EntitySummary{{Name: "Test NPC", EntityType: "npc", Layer: "setting"}},
+		entityDetails: map[string]*store.Entity{
 			"Test NPC|npc": {
 				Name:       "Test NPC",
 				EntityType: "npc",
@@ -92,9 +140,9 @@ relationship_types:
   - name: RELATED_TO
 `)
 
-	validator := &mockGraphValidator{
-		entities: []graph.EntitySummary{{Name: "Test NPC", EntityType: "npc", Layer: "setting"}},
-		entityDetails: map[string]*graph.Entity{
+	validator := &mockStore{
+		entities: []store.EntitySummary{{Name: "Test NPC", EntityType: "npc", Layer: "setting"}},
+		entityDetails: map[string]*store.Entity{
 			"Test NPC|npc": {
 				Name:       "Test NPC",
 				EntityType: "npc",
@@ -122,8 +170,8 @@ relationship_types:
   - name: RELATED_TO
 `)
 
-	validator := &mockGraphValidator{
-		placeholders: []graph.EntitySummary{{Name: "Missing NPC", Layer: "setting"}},
+	validator := &mockStore{
+		placeholders: []store.EntitySummary{{Name: "Missing NPC", Layer: "setting"}},
 	}
 
 	report, err := Run(context.Background(), schema, validator)
@@ -143,8 +191,8 @@ relationship_types:
   - name: RELATED_TO
 `)
 
-	validator := &mockGraphValidator{
-		orphans: []graph.EntitySummary{{Name: "Lonely NPC", Layer: "setting"}},
+	validator := &mockStore{
+		orphans: []store.EntitySummary{{Name: "Lonely NPC", Layer: "setting"}},
 	}
 
 	report, err := Run(context.Background(), schema, validator)

@@ -3,19 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 	"lorecraft/internal/validate"
 )
 
 func validateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "validate",
-		Short: "Run consistency checks against the graph",
+		Short: "Run consistency checks against the database",
 		RunE:  runValidate,
 	}
 	return cmd
@@ -34,13 +34,13 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	report, err := validate.Run(ctx, schema, client)
+	report, err := validate.Run(ctx, schema, db)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printIssues(out *os.File, issues []validate.Issue) {
+func printIssues(out io.Writer, issues []validate.Issue) {
 	for _, issue := range issues {
 		location := issue.Entity
 		if issue.Layer != "" {

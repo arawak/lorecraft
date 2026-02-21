@@ -14,8 +14,8 @@ Westlands?" without me having to paste context into every prompt.
 
 Lorecraft is the toolset that came out of that need. Markdown files remain the
 source of truth (you still write and edit them like normal), but lorecraft
-parses them into a Neo4j graph and exposes that graph to AI agents via the
-Model Context Protocol. The graph is a materialised view that can always be
+parses them into a PostgreSQL database and exposes that data to AI agents via the
+Model Context Protocol. The database is a materialised view that can always be
 destroyed and rebuilt from the source files.
 
 While the initial use case is a fantasy RPG setting, lorecraft is
@@ -26,42 +26,42 @@ knowledge bases, or anything else with interconnected entities.
 ## How it works
 
 ```
-Markdown files       Ingestion (Go CLI)       Neo4j (Docker)
-  with YAML    --->  lorecraft ingest    --->  Graph database
+Markdown files       Ingestion (Go CLI)       PostgreSQL (Docker)
+  with YAML    --->  lorecraft ingest    --->  Relational database
   frontmatter                                       |
-                                                    |
+                                                     |
 AI agents        MCP Server (stdio)                 |
   (OpenCode,  <-->  lorecraft serve   <-------------+
-   Claude, etc)
+    Claude, etc)
 ```
 
 1. You write markdown files with YAML frontmatter that define entities
    (NPCs, locations, factions, whatever your schema declares).
-2. `lorecraft ingest` parses those files and upserts them into Neo4j as
-   nodes and relationships.
+2. `lorecraft ingest` parses those files and upserts them into PostgreSQL as
+   entity records and relationships.
 3. `lorecraft serve` starts an MCP server over stdio that AI agents can
-   query to look up entities, search the graph, and traverse relationships.
+   query to look up entities, search, and traverse relationships.
 4. The CLI also provides direct query and validation commands.
 
 Ingestion is incremental by default. Files that haven't changed since the last
-run are skipped based on content hashes stored in the graph.
+run are skipped based on content hashes stored in the database.
 
 ## Prerequisites
 
 - Go 1.22+
-- Docker (for Neo4j)
+- Docker (for PostgreSQL)
 
 ## Quickstart
 
-Clone the repo and start Neo4j:
+Clone the repo and start PostgreSQL:
 
 ```sh
 git clone https://github.com/yourusername/lorecraft.git
 cd lorecraft
-make neo4j-up
+make db-up
 ```
 
-Wait a few seconds for Neo4j to start. The repo includes a working example
+Wait a few seconds for PostgreSQL to start. The repo includes a working example
 project under `example/`.
 
 Build and run the example:
@@ -77,9 +77,6 @@ cd example
 If you want to use OpenCode with the example, open `example/` as your project
 root. The MCP config lives at `example/.opencode/opencode.json`.
 
-Open the Neo4j browser at http://localhost:7474 (credentials: `neo4j`/`changeme`)
-to see your graph.
-
 To start your own project from scratch, create a new directory and copy the
 schema template:
 
@@ -94,11 +91,8 @@ Create `lorecraft.yaml` inside `my-setting/`:
 project: my-setting
 version: 1
 
-neo4j:
-  uri: bolt://localhost:7687
-  username: neo4j
-  password: changeme
-  database: neo4j
+database:
+  dsn: "postgres://lorecraft:changeme@localhost:5432/lorecraft?sslmode=disable"
 
 layers:
   - name: setting
@@ -122,18 +116,15 @@ where you run `lorecraft`).
 
 ### lorecraft.yaml
 
-The project config. Defines the Neo4j connection, content layers, and
+The project config. Defines the database connection, content layers, and
 file exclusions.
 
 ```yaml
 project: my-setting
 version: 1
 
-neo4j:
-  uri: bolt://localhost:7687
-  username: neo4j
-  password: changeme
-  database: neo4j
+database:
+  dsn: "postgres://lorecraft:changeme@localhost:5432/lorecraft?sslmode=disable"
 
 layers:
   - name: setting
@@ -158,8 +149,8 @@ truth; non-canonical layers track what happened during a specific campaign.
 Defines entity types, their properties, field-to-relationship mappings, and
 relationship types. A bundled template lives at `schemas/fantasy-rpg.yaml`.
 
-Entity types declare which frontmatter fields are stored as node properties,
-which are mapped to graph relationships, and what validation rules apply:
+Entity types declare which frontmatter fields are stored as properties,
+which are mapped to relationships, and what validation rules apply:
 
 ```yaml
 entity_types:
@@ -182,10 +173,10 @@ relationship_types:
 
 ## Writing content
 
-Each markdown file with valid frontmatter becomes a node in the graph.
+Each markdown file with valid frontmatter becomes an entity in the database.
 
 Required frontmatter fields:
-- `title` -- the entity name (used as the node's display name)
+- `title` -- the entity name
 - `type` -- must match an entity type in your schema
 
 Optional built-in fields:
@@ -193,8 +184,11 @@ Optional built-in fields:
 - `related` -- a list of entity names; creates `RELATED_TO` edges
 
 Any other frontmatter field that matches a property in the schema is stored as
-a node property. Fields that match a `field_mapping` in the schema create
+a property. Fields that match a `field_mapping` in the schema create
 relationships to the named target entities.
+
+The markdown body text after the frontmatter is stored and indexed for full-text
+search.
 
 Example:
 
@@ -214,16 +208,16 @@ tags: [bureaucracy, politics, power-broker]
 Lysa Quent is the calculating director of the Bureau of Civic Affairs.
 ```
 
-This creates an NPC node with `role` and `status` as properties,
+This creates an NPC entity with `role` and `status` as properties,
 `LOCATED_IN` and `MEMBER_OF` edges to the referenced entities, and
 `RELATED_TO` edges to the listed related entities. If a target entity doesn't
-exist yet, a placeholder node is created and resolved on the next ingestion.
+exist yet, a placeholder is created and resolved on the next ingestion.
 
 ## CLI reference
 
 ### ingest
 
-Synchronise the graph with markdown source files.
+Synchronise the database with markdown source files.
 
 ```sh
 lorecraft ingest          # incremental (skips unchanged files)
@@ -232,7 +226,7 @@ lorecraft ingest --full   # force full re-ingestion
 
 ### validate
 
-Run consistency checks against the graph. Reports dangling placeholders,
+Run consistency checks against the database. Reports dangling placeholders,
 orphaned entities, duplicate names, invalid enum values, and missing required
 properties.
 
@@ -261,7 +255,7 @@ lorecraft query relations "Westport" --type PART_OF --direction incoming
 
 ### query list
 
-List entities in the graph, optionally filtered.
+List entities, optionally filtered.
 
 ```sh
 lorecraft query list
@@ -271,7 +265,8 @@ lorecraft query list --layer setting --tag politics
 
 ### query search
 
-Full-text search across entity names and tags.
+Full-text search across entity names, tags, and body text. Returns snippets
+with highlighted matches.
 
 ```sh
 lorecraft query search "bureau"
@@ -286,13 +281,13 @@ Compute current state for an entity from campaign events.
 lorecraft query state "Westport" --layer campaign-shadow-war
 ```
 
-### query cypher
+### query sql
 
-Execute a raw Cypher query against the graph.
+Execute a raw SQL query against the database.
 
 ```sh
-lorecraft query cypher "MATCH (n:Entity) RETURN n.name LIMIT 10"
-lorecraft query cypher "MATCH (n:Entity {layer: \$layer}) RETURN n.name" --param layer=setting
+lorecraft query sql "SELECT name, entity_type FROM entities LIMIT 10"
+lorecraft query sql "SELECT name FROM entities WHERE layer = \$1" --param 1=setting
 ```
 
 ### serve
@@ -313,11 +308,11 @@ lorecraft init --name my-setting
 
 ## MCP server
 
-Lorecraft exposes the graph to AI agents via the Model Context Protocol. The
+Lorecraft exposes the database to AI agents via the Model Context Protocol. The
 server communicates over stdio and provides these tools:
 
-- `search_lore` -- full-text search across entity names and tags
-- `get_entity` -- retrieve a single entity with all properties
+- `search_lore` -- full-text search across entity names, tags, and body text with snippets
+- `get_entity` -- retrieve a single entity with all properties and body text
 - `get_relationships` -- traverse relationships from an entity with configurable depth and direction
 - `list_entities` -- list entities filtered by type, layer, or tag
 - `get_schema` -- return the full schema definition
@@ -350,23 +345,16 @@ If your binary lives elsewhere, adjust the command path accordingly.
 The Makefile provides common targets:
 
 ```sh
-make build       # compile to bin/lorecraft
-make test        # run unit tests
-make fmt         # go fmt
-make vet         # go vet
-make tidy        # go mod tidy
-make neo4j-up    # start Neo4j via Docker Compose
-make neo4j-down  # stop Neo4j
-make neo4j-logs  # tail Neo4j logs
-```
-
-Integration tests require a running Neo4j instance and are tagged separately:
-
-```sh
-make neo4j-up
-go test ./internal/graph -v -tags integration
+make build     # compile to bin/lorecraft
+make test      # run unit tests
+make fmt       # go fmt
+make vet       # go vet
+make tidy      # go mod tidy
+make db-up     # start PostgreSQL via Docker Compose
+make db-down   # stop PostgreSQL
+make db-logs   # tail PostgreSQL logs
 ```
 
 ## License
 
-MIT. Thanks to all the folks out there who have made the software I use. 
+MIT. Thanks to all the folks out there who have made the software I use.

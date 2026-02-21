@@ -8,23 +8,23 @@ import (
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 	"lorecraft/internal/ingest"
 )
 
-var ingestFull bool
-
 func ingestCmd() *cobra.Command {
+	var full bool
 	cmd := &cobra.Command{
 		Use:   "ingest",
-		Short: "Synchronise the graph with markdown source files",
-		RunE:  runIngest,
+		Short: "Synchronise the database with markdown source files",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runIngest(cmd, full)
+		},
 	}
-	cmd.Flags().BoolVar(&ingestFull, "full", false, "Force full re-ingestion (ignore incremental hashes)")
+	cmd.Flags().BoolVar(&full, "full", false, "Force full re-ingestion (ignore incremental hashes)")
 	return cmd
 }
 
-func runIngest(cmd *cobra.Command, args []string) error {
+func runIngest(cmd *cobra.Command, full bool) error {
 	ctx := context.Background()
 
 	cfg, err := config.LoadProjectConfig("lorecraft.yaml")
@@ -37,13 +37,13 @@ func runIngest(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	result, err := ingest.Run(ctx, cfg, schema, client, ingest.Options{Full: ingestFull})
+	result, err := ingest.Run(ctx, cfg, schema, db, ingest.Options{Full: full})
 	if err != nil {
 		return err
 	}

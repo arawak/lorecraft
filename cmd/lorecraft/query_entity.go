@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 )
 
 func queryEntityCmd() *cobra.Command {
@@ -35,13 +34,13 @@ func runQueryEntity(cmd *cobra.Command, name, entityType string) error {
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	entity, err := client.GetEntity(ctx, name, entityType)
+	entity, err := db.GetEntity(ctx, name, entityType)
 	if err != nil {
 		return err
 	}
@@ -58,6 +57,9 @@ func runQueryEntity(cmd *cobra.Command, name, entityType string) error {
 	}
 	if entity.SourceFile != "" {
 		fmt.Fprintf(os.Stdout, "Source: %s\n", entity.SourceFile)
+	}
+	if entity.Body != "" {
+		fmt.Fprintf(os.Stdout, "Body:\n%s\n", entity.Body)
 	}
 
 	if len(entity.Properties) == 0 {

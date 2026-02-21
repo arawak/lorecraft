@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
+	"lorecraft/internal/store"
 )
 
 type Severity string
@@ -21,7 +21,6 @@ const (
 	codeMissingRequired     = "missing_required_property"
 	codeDanglingPlaceholder = "dangling_placeholder"
 	codeOrphanedEntity      = "orphaned_entity"
-	codeDuplicateName       = "duplicate_name"
 	codeCrossLayerViolation = "cross_layer_violation"
 )
 
@@ -38,38 +37,31 @@ type Report struct {
 	Issues []Issue
 }
 
-func Run(ctx context.Context, schema *config.Schema, graphClient GraphValidator) (*Report, error) {
+func Run(ctx context.Context, schema *config.Schema, db Store) (*Report, error) {
 	if schema == nil {
 		return nil, fmt.Errorf("schema is required")
 	}
-	if graphClient == nil {
-		return nil, fmt.Errorf("graph client is required")
+	if db == nil {
+		return nil, fmt.Errorf("database client is required")
 	}
 
 	issues := make([]Issue, 0)
 
-	entities, err := graphClient.ListEntities(ctx, "", "", "")
+	entities, err := db.ListEntitiesWithProperties(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list entities: %w", err)
 	}
 
-	for _, summary := range entities {
-		entity, err := graphClient.GetEntity(ctx, summary.Name, summary.EntityType)
-		if err != nil {
-			return nil, fmt.Errorf("get entity %s: %w", summary.Name, err)
-		}
-		if entity == nil {
-			continue
-		}
+	for _, entity := range entities {
 		entityType, ok := schema.EntityTypeByName(entity.EntityType)
 		if !ok {
 			continue
 		}
-		issues = append(issues, validateEnumValues(entity, entityType)...)
-		issues = append(issues, validateRequiredProperties(entity, entityType)...)
+		issues = append(issues, validateEnumValues(&entity, entityType)...)
+		issues = append(issues, validateRequiredProperties(&entity, entityType)...)
 	}
 
-	placeholders, err := graphClient.ListDanglingPlaceholders(ctx)
+	placeholders, err := db.ListDanglingPlaceholders(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list dangling placeholders: %w", err)
 	}
@@ -77,7 +69,7 @@ func Run(ctx context.Context, schema *config.Schema, graphClient GraphValidator)
 		issues = append(issues, issueFromSummary(summary, SeverityError, codeDanglingPlaceholder, "dangling placeholder entity"))
 	}
 
-	orphans, err := graphClient.ListOrphanedEntities(ctx)
+	orphans, err := db.ListOrphanedEntities(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list orphaned entities: %w", err)
 	}
@@ -85,15 +77,7 @@ func Run(ctx context.Context, schema *config.Schema, graphClient GraphValidator)
 		issues = append(issues, issueFromSummary(summary, SeverityWarn, codeOrphanedEntity, "orphaned entity"))
 	}
 
-	duplicates, err := graphClient.ListDuplicateNames(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list duplicate names: %w", err)
-	}
-	for _, summary := range duplicates {
-		issues = append(issues, issueFromSummary(summary, SeverityError, codeDuplicateName, "duplicate entity name in layer"))
-	}
-
-	crossLayer, err := graphClient.ListCrossLayerViolations(ctx)
+	crossLayer, err := db.ListCrossLayerViolations(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list cross-layer violations: %w", err)
 	}
@@ -104,7 +88,7 @@ func Run(ctx context.Context, schema *config.Schema, graphClient GraphValidator)
 	return &Report{Issues: issues}, nil
 }
 
-func validateEnumValues(entity *graph.Entity, entityType *config.EntityType) []Issue {
+func validateEnumValues(entity *store.Entity, entityType *config.EntityType) []Issue {
 	if entity == nil || entityType == nil {
 		return nil
 	}
@@ -122,7 +106,7 @@ func validateEnumValues(entity *graph.Entity, entityType *config.EntityType) []I
 		if !ok {
 			continue
 		}
-		if !containsString(prop.Values, valueStr) {
+		if !containsStringCI(prop.Values, valueStr) {
 			issues = append(issues, Issue{
 				Severity: SeverityError,
 				Code:     codeEnumInvalid,
@@ -137,7 +121,7 @@ func validateEnumValues(entity *graph.Entity, entityType *config.EntityType) []I
 	return issues
 }
 
-func validateRequiredProperties(entity *graph.Entity, entityType *config.EntityType) []Issue {
+func validateRequiredProperties(entity *store.Entity, entityType *config.EntityType) []Issue {
 	if entity == nil || entityType == nil {
 		return nil
 	}
@@ -174,7 +158,7 @@ func validateRequiredProperties(entity *graph.Entity, entityType *config.EntityT
 	return issues
 }
 
-func issueFromSummary(summary graph.EntitySummary, severity Severity, code, message string) Issue {
+func issueFromSummary(summary store.EntitySummary, severity Severity, code, message string) Issue {
 	return Issue{
 		Severity: severity,
 		Code:     code,
@@ -187,6 +171,17 @@ func issueFromSummary(summary graph.EntitySummary, severity Severity, code, mess
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+// containsStringCI performs case-insensitive string matching against a list of enum values.
+func containsStringCI(values []string, target string) bool {
+	targetLower := strings.ToLower(target)
+	for _, value := range values {
+		if strings.ToLower(value) == targetLower {
 			return true
 		}
 	}
