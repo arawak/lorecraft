@@ -11,19 +11,20 @@ import (
 	"lorecraft/internal/ingest"
 )
 
-var ingestFull bool
-
 func ingestCmd() *cobra.Command {
+	var full bool
 	cmd := &cobra.Command{
 		Use:   "ingest",
 		Short: "Synchronise the database with markdown source files",
-		RunE:  runIngest,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runIngest(cmd, full)
+		},
 	}
-	cmd.Flags().BoolVar(&ingestFull, "full", false, "Force full re-ingestion (ignore incremental hashes)")
+	cmd.Flags().BoolVar(&full, "full", false, "Force full re-ingestion (ignore incremental hashes)")
 	return cmd
 }
 
-func runIngest(cmd *cobra.Command, args []string) error {
+func runIngest(cmd *cobra.Command, full bool) error {
 	ctx := context.Background()
 
 	cfg, err := config.LoadProjectConfig("lorecraft.yaml")
@@ -42,7 +43,7 @@ func runIngest(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close(ctx)
 
-	result, err := ingest.Run(ctx, cfg, schema, db, ingest.Options{Full: ingestFull})
+	result, err := ingest.Run(ctx, cfg, schema, db, ingest.Options{Full: full})
 	if err != nil {
 		return err
 	}

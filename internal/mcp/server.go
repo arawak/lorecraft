@@ -15,13 +15,13 @@ type Server struct {
 	mcp    *sdk.Server
 }
 
-func NewServer(schema *config.Schema, db store.Store) *Server {
+func NewServer(schema *config.Schema, db store.Store, version string) *Server {
 	s := &Server{
 		schema: schema,
 		db:     db,
 		mcp: sdk.NewServer(&sdk.Implementation{
 			Name:    "lorecraft",
-			Version: "0.1.0",
+			Version: version,
 		}, nil),
 	}
 	s.registerTools()

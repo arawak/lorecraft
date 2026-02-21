@@ -45,6 +45,16 @@ func (m *mockStore) ListEntities(ctx context.Context, entityType, layer, tag str
 	return m.entities, nil
 }
 
+func (m *mockStore) ListEntitiesWithProperties(ctx context.Context) ([]store.Entity, error) {
+	entities := make([]store.Entity, 0)
+	for _, summary := range m.entities {
+		if entity, ok := m.entityDetails[summary.Name+"|"+summary.EntityType]; ok {
+			entities = append(entities, *entity)
+		}
+	}
+	return entities, nil
+}
+
 func (m *mockStore) GetEntity(ctx context.Context, name, entityType string) (*store.Entity, error) {
 	if m.entityDetails == nil {
 		return nil, nil
@@ -78,10 +88,6 @@ func (m *mockStore) ListDanglingPlaceholders(ctx context.Context) ([]store.Entit
 
 func (m *mockStore) ListOrphanedEntities(ctx context.Context) ([]store.EntitySummary, error) {
 	return m.orphans, nil
-}
-
-func (m *mockStore) ListDuplicateNames(ctx context.Context) ([]store.EntitySummary, error) {
-	return m.duplicates, nil
 }
 
 func (m *mockStore) ListCrossLayerViolations(ctx context.Context) ([]store.EntitySummary, error) {

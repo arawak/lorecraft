@@ -116,7 +116,7 @@ WHERE name_normalized = $1
 		return nil, nil
 	}
 	if len(entities) > 1 {
-		return nil, fmt.Errorf("entity %q matched %d rows", name, len(entities))
+		return nil, fmt.Errorf("internal error: entity uniqueness constraint violated (found %d rows for %q)", len(entities), name)
 	}
 
 	return &entities[0], nil
@@ -161,4 +161,60 @@ ORDER BY name
 	}
 
 	return summaries, nil
+}
+
+func (c *Client) ListEntitiesWithProperties(ctx context.Context) ([]store.Entity, error) {
+	query := `
+SELECT name, entity_type, layer, source_file, source_hash, tags, properties, body
+FROM entities
+WHERE is_placeholder = FALSE
+ORDER BY name
+`
+
+	rows, err := c.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("listing entities with properties: %w", err)
+	}
+	defer rows.Close()
+
+	var entities []store.Entity
+	for rows.Next() {
+		var e store.Entity
+		var propsBytes []byte
+		err := rows.Scan(
+			&e.Name,
+			&e.EntityType,
+			&e.Layer,
+			&e.SourceFile,
+			&e.SourceHash,
+			&e.Tags,
+			&propsBytes,
+			&e.Body,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scanning entity: %w", err)
+		}
+		if len(propsBytes) > 0 {
+			if err := json.Unmarshal(propsBytes, &e.Properties); err != nil {
+				return nil, fmt.Errorf("unmarshaling properties: %w", err)
+			}
+		}
+		if e.Properties == nil {
+			e.Properties = map[string]any{}
+		}
+		if e.Tags == nil {
+			e.Tags = []string{}
+		}
+		entities = append(entities, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating entities: %w", err)
+	}
+
+	if entities == nil {
+		entities = []store.Entity{}
+	}
+
+	return entities, nil
 }

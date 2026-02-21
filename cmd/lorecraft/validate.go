@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -78,7 +79,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func printIssues(out *os.File, issues []validate.Issue) {
+func printIssues(out io.Writer, issues []validate.Issue) {
 	for _, issue := range issues {
 		location := issue.Entity
 		if issue.Layer != "" {

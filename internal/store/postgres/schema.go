@@ -8,6 +8,13 @@ import (
 )
 
 func (c *Client) EnsureSchema(ctx context.Context, schema *config.Schema) error {
+	// Note: All DDL statements are executed in a single call, which PostgreSQL
+	// runs atomically within an implicit transaction. The use of "IF NOT EXISTS"
+	// makes this idempotent for the initial schema creation and subsequent runs
+	// without destructive schema changes. However, as the schema evolves with
+	// more migrations, consider implementing a dedicated migration table and
+	// tool (e.g., migrate, flyway) to track schema versions and enable
+	// non-idempotent migrations (e.g., column renames, data transformations).
 	ddl := `
 CREATE TABLE IF NOT EXISTS entities (
     id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

@@ -39,6 +39,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	defer db.Close(ctx)
 
-	server := mcp.NewServer(schema, db)
+	server := mcp.NewServer(schema, db, version)
 	return server.Run(ctx, &sdk.StdioTransport{})
 }

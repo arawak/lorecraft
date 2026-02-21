@@ -3,8 +3,11 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 
 	"lorecraft/internal/store"
 )
@@ -120,7 +123,7 @@ func (c *Client) fetchEntityProperties(ctx context.Context, name, layer string) 
 	var propsBytes []byte
 	err := c.pool.QueryRow(ctx, query, strings.ToLower(name), layer).Scan(&propsBytes)
 	if err != nil {
-		if strings.Contains(err.Error(), "no rows") {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("fetching base entity: %w", err)
@@ -334,6 +337,10 @@ func appendValue(existing any, add any) any {
 	}
 }
 
+// copyProperties performs a shallow copy of a properties map.
+// Nested slice or map values are not deep-copied. This is safe in practice because
+// applyConsequences creates new slices when appending values via appendValue(),
+// but callers should be aware of shared references to nested structures.
 func copyProperties(props map[string]any) map[string]any {
 	if props == nil {
 		return map[string]any{}

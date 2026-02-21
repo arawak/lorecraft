@@ -85,6 +85,10 @@ func (m *mockStore) ListEntities(ctx context.Context, entityType, layer, tag str
 	return m.listResult, m.listErr
 }
 
+func (m *mockStore) ListEntitiesWithProperties(ctx context.Context) ([]store.Entity, error) {
+	return nil, nil
+}
+
 func (m *mockStore) Search(ctx context.Context, query, layer, entityType string) ([]store.SearchResult, error) {
 	m.lastSearchQuery = query
 	m.lastSearchLayer = layer
@@ -114,10 +118,6 @@ func (m *mockStore) ListOrphanedEntities(ctx context.Context) ([]store.EntitySum
 	return nil, nil
 }
 
-func (m *mockStore) ListDuplicateNames(ctx context.Context) ([]store.EntitySummary, error) {
-	return nil, nil
-}
-
 func (m *mockStore) ListCrossLayerViolations(ctx context.Context) ([]store.EntitySummary, error) {
 	return nil, nil
 }
@@ -127,7 +127,7 @@ func (m *mockStore) RunSQL(ctx context.Context, query string, params map[string]
 }
 
 func TestGetEntity_NotFound(t *testing.T) {
-	server := NewServer(&config.Schema{Version: 1}, &mockStore{})
+	server := NewServer(&config.Schema{Version: 1}, &mockStore{}, "test")
 
 	_, _, err := server.handleGetEntity(context.Background(), nil, GetEntityInput{Name: "Missing"})
 	if err == nil {
@@ -141,7 +141,7 @@ func TestSearchLore(t *testing.T) {
 			{Name: "Westport", EntityType: "settlement", Layer: "setting", Tags: []string{"coastal"}, Score: 1.0},
 		},
 	}
-	server := NewServer(&config.Schema{Version: 1}, storeMock)
+	server := NewServer(&config.Schema{Version: 1}, storeMock, "test")
 
 	_, output, err := server.handleSearchLore(context.Background(), nil, SearchLoreInput{Query: "west", Layer: "setting", Type: "settlement"})
 	if err != nil {
@@ -159,7 +159,7 @@ func TestListEntities(t *testing.T) {
 	storeMock := &mockStore{
 		listResult: []store.EntitySummary{{Name: "A", EntityType: "npc", Layer: "setting", Tags: []string{"alpha"}}},
 	}
-	server := NewServer(&config.Schema{Version: 1}, storeMock)
+	server := NewServer(&config.Schema{Version: 1}, storeMock, "test")
 
 	_, output, err := server.handleListEntities(context.Background(), nil, ListEntitiesInput{Type: "npc", Layer: "setting", Tag: "alpha"})
 	if err != nil {
@@ -183,7 +183,7 @@ func TestGetRelationships(t *testing.T) {
 			Depth:     1,
 		}},
 	}
-	server := NewServer(&config.Schema{Version: 1}, storeMock)
+	server := NewServer(&config.Schema{Version: 1}, storeMock, "test")
 
 	_, output, err := server.handleGetRelationships(context.Background(), nil, GetRelationshipsInput{Name: "A", Type: "RELATED_TO", Depth: 2, Direction: "both"})
 	if err != nil {
@@ -213,7 +213,7 @@ func TestGetSchema(t *testing.T) {
 		}},
 		RelationshipTypes: []config.RelationshipType{{Name: "MEMBER_OF"}},
 	}
-	server := NewServer(schema, &mockStore{})
+	server := NewServer(schema, &mockStore{}, "test")
 
 	_, output, err := server.handleGetSchema(context.Background(), nil, GetSchemaInput{})
 	if err != nil {
@@ -247,7 +247,7 @@ func TestGetCurrentState(t *testing.T) {
 			}},
 		},
 	}
-	server := NewServer(&config.Schema{Version: 1}, storeMock)
+	server := NewServer(&config.Schema{Version: 1}, storeMock, "test")
 
 	_, output, err := server.handleGetCurrentState(context.Background(), nil, GetCurrentStateInput{Name: "Westport", Layer: "campaign"})
 	if err != nil {
@@ -265,7 +265,7 @@ func TestGetTimeline(t *testing.T) {
 	storeMock := &mockStore{
 		timelineResult: []store.Event{{Name: "Storm Surge", Layer: "campaign", Session: 1}},
 	}
-	server := NewServer(&config.Schema{Version: 1}, storeMock)
+	server := NewServer(&config.Schema{Version: 1}, storeMock, "test")
 
 	_, output, err := server.handleGetTimeline(context.Background(), nil, GetTimelineInput{Layer: "campaign", Entity: "Westport", FromSession: 1, ToSession: 2})
 	if err != nil {
@@ -289,7 +289,7 @@ func TestCheckConsistency(t *testing.T) {
 		}},
 		timelineResult: []store.Event{{Name: "Storm Surge", Layer: "campaign", Session: 1}},
 	}
-	server := NewServer(&config.Schema{Version: 1}, storeMock)
+	server := NewServer(&config.Schema{Version: 1}, storeMock, "test")
 
 	_, output, err := server.handleCheckConsistency(context.Background(), nil, CheckConsistencyInput{Name: "Westport", Layer: "campaign", Depth: 2})
 	if err != nil {

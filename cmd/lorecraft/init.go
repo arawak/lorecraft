@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"lorecraft/schemas"
 )
 
 func initCmd() *cobra.Command {
@@ -37,8 +38,8 @@ func runInit(projectName, template string) error {
 		return fmt.Errorf("%s already exists", schemaPath)
 	}
 
-	templatePath := filepath.Join("schemas", template+".yaml")
-	contents, err := os.ReadFile(templatePath)
+	templateFileName := template + ".yaml"
+	contents, err := schemas.FS.ReadFile(templateFileName)
 	if err != nil {
 		return fmt.Errorf("reading template %s: %w", template, err)
 	}

@@ -105,6 +105,10 @@ func (m *mockStore) ListEntities(ctx context.Context, entityType, layer, tag str
 	return nil, nil
 }
 
+func (m *mockStore) ListEntitiesWithProperties(ctx context.Context) ([]store.Entity, error) {
+	return nil, nil
+}
+
 func (m *mockStore) Search(ctx context.Context, query, layer, entityType string) ([]store.SearchResult, error) {
 	return nil, nil
 }
@@ -122,10 +126,6 @@ func (m *mockStore) ListDanglingPlaceholders(ctx context.Context) ([]store.Entit
 }
 
 func (m *mockStore) ListOrphanedEntities(ctx context.Context) ([]store.EntitySummary, error) {
-	return nil, nil
-}
-
-func (m *mockStore) ListDuplicateNames(ctx context.Context) ([]store.EntitySummary, error) {
 	return nil, nil
 }
 

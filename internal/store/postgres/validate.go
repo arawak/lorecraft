@@ -27,6 +27,10 @@ func (c *Client) ListDanglingPlaceholders(ctx context.Context) ([]store.EntitySu
 		summaries = append(summaries, s)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	if summaries == nil {
 		summaries = []store.EntitySummary{}
 	}
@@ -58,32 +62,8 @@ WHERE NOT EXISTS (SELECT 1 FROM edges WHERE src_id = e.id OR dst_id = e.id)
 		summaries = append(summaries, s)
 	}
 
-	if summaries == nil {
-		summaries = []store.EntitySummary{}
-	}
-	return summaries, nil
-}
-
-func (c *Client) ListDuplicateNames(ctx context.Context) ([]store.EntitySummary, error) {
-	query := `
-SELECT name_normalized AS name, layer FROM entities
-GROUP BY name_normalized, layer
-HAVING count(*) > 1
-`
-
-	rows, err := c.pool.Query(ctx, query)
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var summaries []store.EntitySummary
-	for rows.Next() {
-		var s store.EntitySummary
-		if err := rows.Scan(&s.Name, &s.Layer); err != nil {
-			return nil, err
-		}
-		summaries = append(summaries, s)
 	}
 
 	if summaries == nil {
@@ -93,5 +73,6 @@ HAVING count(*) > 1
 }
 
 func (c *Client) ListCrossLayerViolations(ctx context.Context) ([]store.EntitySummary, error) {
+	// TODO: Implement cross-layer violation detection once event/campaign layer logic is finalized
 	return []store.EntitySummary{}, nil
 }
