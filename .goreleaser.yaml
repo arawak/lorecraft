@@ -19,6 +19,50 @@ builds:
     main: ./cmd/lorecraft
     ldflags:
       - -s -w -X main.version={{.Version}}
+    # ID is needed for docker builds to reference the binary
+    id: lorecraft
+
+dockers:
+  - use: buildx
+    goos: linux
+    goarch: amd64
+    ids:
+      - lorecraft
+    dockerfile: Dockerfile
+    image_templates:
+      - "ghcr.io/arawak/lorecraft:{{ .Tag }}-amd64"
+      - "ghcr.io/arawak/lorecraft:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+  - use: buildx
+    goos: linux
+    goarch: arm64
+    ids:
+      - lorecraft
+    dockerfile: Dockerfile
+    image_templates:
+      - "ghcr.io/arawak/lorecraft:{{ .Tag }}-arm64"
+      - "ghcr.io/arawak/lorecraft:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+docker_manifests:
+  - name_template: "ghcr.io/arawak/lorecraft:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/arawak/lorecraft:{{ .Tag }}-amd64"
+      - "ghcr.io/arawak/lorecraft:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/arawak/lorecraft:latest"
+    image_templates:
+      - "ghcr.io/arawak/lorecraft:latest-amd64"
+      - "ghcr.io/arawak/lorecraft:latest-arm64"
 
 archives:
   - format: tar.gz
@@ -37,6 +81,11 @@ archives:
 
 checksum:
   name_template: 'checksums.txt'
+
+sboms:
+  - artifacts: archive
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.spdx.json"
 
 snapshot:
   name_template: "{{ .Tag }}-next"
