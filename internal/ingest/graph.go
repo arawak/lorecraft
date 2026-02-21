@@ -1,17 +1,5 @@
 package ingest
 
-import (
-	"context"
+import "lorecraft/internal/store"
 
-	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
-)
-
-type GraphClient interface {
-	UpsertEntity(ctx context.Context, e graph.EntityInput) error
-	UpsertRelationship(ctx context.Context, fromName, fromLayer, toName, toLayer, relType string) error
-	RemoveStaleNodes(ctx context.Context, layer string, currentSourceFiles []string) (int64, error)
-	EnsureIndexes(ctx context.Context, schema *config.Schema) error
-	GetLayerHashes(ctx context.Context, layer string) (map[string]string, error)
-	FindEntityLayer(ctx context.Context, name string, layers []string) (string, error)
-}
+type Store = store.Store

@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 )
 
 func queryListCmd() *cobra.Command {
@@ -17,7 +16,7 @@ func queryListCmd() *cobra.Command {
 	var tag string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List entities in the graph",
+		Short: "List entities in the database",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runQueryList(cmd, entityType, layer, tag)
 		},
@@ -36,13 +35,13 @@ func runQueryList(cmd *cobra.Command, entityType, layer, tag string) error {
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	entities, err := client.ListEntities(ctx, entityType, layer, tag)
+	entities, err := db.ListEntities(ctx, entityType, layer, tag)
 	if err != nil {
 		return err
 	}

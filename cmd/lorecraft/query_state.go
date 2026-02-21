@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 )
 
 func queryStateCmd() *cobra.Command {
@@ -39,13 +38,13 @@ func runQueryState(cmd *cobra.Command, name, layer string) error {
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	state, err := client.GetCurrentState(ctx, name, layer)
+	state, err := db.GetCurrentState(ctx, name, layer)
 	if err != nil {
 		return err
 	}

@@ -6,28 +6,19 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
+	"lorecraft/internal/store"
 )
-
-type GraphQuerier interface {
-	GetEntity(ctx context.Context, name, entityType string) (*graph.Entity, error)
-	GetRelationships(ctx context.Context, name, relType, direction string, depth int) ([]graph.Relationship, error)
-	ListEntities(ctx context.Context, entityType, layer, tag string) ([]graph.EntitySummary, error)
-	Search(ctx context.Context, query, layer, entityType string) ([]graph.SearchResult, error)
-	GetCurrentState(ctx context.Context, name, layer string) (*graph.CurrentState, error)
-	GetTimeline(ctx context.Context, layer, entity string, fromSession, toSession int) ([]graph.Event, error)
-}
 
 type Server struct {
 	schema *config.Schema
-	graph  GraphQuerier
+	db     store.Store
 	mcp    *sdk.Server
 }
 
-func NewServer(schema *config.Schema, graph GraphQuerier) *Server {
+func NewServer(schema *config.Schema, db store.Store) *Server {
 	s := &Server{
 		schema: schema,
-		graph:  graph,
+		db:     db,
 		mcp: sdk.NewServer(&sdk.Implementation{
 			Name:    "lorecraft",
 			Version: "0.1.0",

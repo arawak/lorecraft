@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 	"lorecraft/internal/ingest"
 )
 
@@ -17,7 +16,7 @@ var ingestFull bool
 func ingestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ingest",
-		Short: "Synchronise the graph with markdown source files",
+		Short: "Synchronise the database with markdown source files",
 		RunE:  runIngest,
 	}
 	cmd.Flags().BoolVar(&ingestFull, "full", false, "Force full re-ingestion (ignore incremental hashes)")
@@ -37,13 +36,13 @@ func runIngest(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	result, err := ingest.Run(ctx, cfg, schema, client, ingest.Options{Full: ingestFull})
+	result, err := ingest.Run(ctx, cfg, schema, db, ingest.Options{Full: ingestFull})
 	if err != nil {
 		return err
 	}

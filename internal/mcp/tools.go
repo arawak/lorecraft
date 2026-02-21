@@ -7,7 +7,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
+	"lorecraft/internal/store"
 )
 
 type SearchLoreInput struct {
@@ -64,6 +64,7 @@ type EntityOutput struct {
 	SourceHash string         `json:"source_hash"`
 	Tags       []string       `json:"tags"`
 	Properties map[string]any `json:"properties"`
+	Body       string         `json:"body,omitempty"`
 }
 
 type EntitySummaryOutput struct {
@@ -93,6 +94,7 @@ type SearchResultOutput struct {
 	Layer      string   `json:"layer"`
 	Tags       []string `json:"tags"`
 	Score      float64  `json:"score"`
+	Snippet    string   `json:"snippet,omitempty"`
 }
 
 type SearchLoreOutput struct {
@@ -218,14 +220,14 @@ func (s *Server) handleSearchLore(ctx context.Context, req *sdk.CallToolRequest,
 	if input.Query == "" {
 		return nil, SearchLoreOutput{}, fmt.Errorf("query is required")
 	}
-	results, err := s.graph.Search(ctx, input.Query, input.Layer, input.Type)
+	results, err := s.db.Search(ctx, input.Query, input.Layer, input.Type)
 	if err != nil {
 		return nil, SearchLoreOutput{}, err
 	}
 
 	output := make([]SearchResultOutput, 0, len(results))
 	for _, result := range results {
-		output = append(output, searchResultOutputFromGraph(result))
+		output = append(output, searchResultOutputFromStore(result))
 	}
 	return nil, SearchLoreOutput{Results: output}, nil
 }
@@ -234,14 +236,14 @@ func (s *Server) handleGetEntity(ctx context.Context, req *sdk.CallToolRequest, 
 	if input.Name == "" {
 		return nil, EntityOutput{}, fmt.Errorf("name is required")
 	}
-	entity, err := s.graph.GetEntity(ctx, input.Name, input.Type)
+	entity, err := s.db.GetEntity(ctx, input.Name, input.Type)
 	if err != nil {
 		return nil, EntityOutput{}, err
 	}
 	if entity == nil {
 		return nil, EntityOutput{}, fmt.Errorf("entity not found")
 	}
-	return nil, entityOutputFromGraph(entity), nil
+	return nil, entityOutputFromStore(entity), nil
 }
 
 func (s *Server) handleGetRelationships(ctx context.Context, req *sdk.CallToolRequest, input GetRelationshipsInput) (*sdk.CallToolResult, GetRelationshipsOutput, error) {
@@ -252,27 +254,27 @@ func (s *Server) handleGetRelationships(ctx context.Context, req *sdk.CallToolRe
 	if depth == 0 {
 		depth = 1
 	}
-	rels, err := s.graph.GetRelationships(ctx, input.Name, input.Type, input.Direction, depth)
+	rels, err := s.db.GetRelationships(ctx, input.Name, input.Type, input.Direction, depth)
 	if err != nil {
 		return nil, GetRelationshipsOutput{}, err
 	}
 
 	output := make([]RelationshipOutput, 0, len(rels))
 	for _, rel := range rels {
-		output = append(output, relationshipOutputFromGraph(rel))
+		output = append(output, relationshipOutputFromStore(rel))
 	}
 	return nil, GetRelationshipsOutput{Relationships: output}, nil
 }
 
 func (s *Server) handleListEntities(ctx context.Context, req *sdk.CallToolRequest, input ListEntitiesInput) (*sdk.CallToolResult, ListEntitiesOutput, error) {
-	items, err := s.graph.ListEntities(ctx, input.Type, input.Layer, input.Tag)
+	items, err := s.db.ListEntities(ctx, input.Type, input.Layer, input.Tag)
 	if err != nil {
 		return nil, ListEntitiesOutput{}, err
 	}
 
 	output := make([]EntitySummaryOutput, 0, len(items))
 	for _, item := range items {
-		output = append(output, entitySummaryOutputFromGraph(item))
+		output = append(output, entitySummaryOutputFromStore(item))
 	}
 	return nil, ListEntitiesOutput{Entities: output}, nil
 }
@@ -285,32 +287,32 @@ func (s *Server) handleGetCurrentState(ctx context.Context, req *sdk.CallToolReq
 	if input.Name == "" || input.Layer == "" {
 		return nil, CurrentStateOutput{}, fmt.Errorf("name and layer are required")
 	}
-	state, err := s.graph.GetCurrentState(ctx, input.Name, input.Layer)
+	state, err := s.db.GetCurrentState(ctx, input.Name, input.Layer)
 	if err != nil {
 		return nil, CurrentStateOutput{}, err
 	}
 	if state == nil {
 		return nil, CurrentStateOutput{}, fmt.Errorf("state not found")
 	}
-	return nil, currentStateOutputFromGraph(state), nil
+	return nil, currentStateOutputFromStore(state), nil
 }
 
 func (s *Server) handleGetTimeline(ctx context.Context, req *sdk.CallToolRequest, input GetTimelineInput) (*sdk.CallToolResult, TimelineOutput, error) {
 	if input.Layer == "" {
 		return nil, TimelineOutput{}, fmt.Errorf("layer is required")
 	}
-	events, err := s.graph.GetTimeline(ctx, input.Layer, input.Entity, input.FromSession, input.ToSession)
+	events, err := s.db.GetTimeline(ctx, input.Layer, input.Entity, input.FromSession, input.ToSession)
 	if err != nil {
 		return nil, TimelineOutput{}, err
 	}
-	return nil, TimelineOutput{Events: eventOutputsFromGraph(events)}, nil
+	return nil, TimelineOutput{Events: eventOutputsFromStore(events)}, nil
 }
 
 func (s *Server) handleCheckConsistency(ctx context.Context, req *sdk.CallToolRequest, input CheckConsistencyInput) (*sdk.CallToolResult, CheckConsistencyOutput, error) {
 	if input.Name == "" || input.Layer == "" {
 		return nil, CheckConsistencyOutput{}, fmt.Errorf("name and layer are required")
 	}
-	entity, err := s.graph.GetEntity(ctx, input.Name, input.Type)
+	entity, err := s.db.GetEntity(ctx, input.Name, input.Type)
 	if err != nil {
 		return nil, CheckConsistencyOutput{}, err
 	}
@@ -321,20 +323,20 @@ func (s *Server) handleCheckConsistency(ctx context.Context, req *sdk.CallToolRe
 	if depth == 0 {
 		depth = 1
 	}
-	rels, err := s.graph.GetRelationships(ctx, input.Name, "", input.Direction, depth)
+	rels, err := s.db.GetRelationships(ctx, input.Name, "", input.Direction, depth)
 	if err != nil {
 		return nil, CheckConsistencyOutput{}, err
 	}
 	rels = dedupeRelationships(rels)
-	events, err := s.graph.GetTimeline(ctx, input.Layer, input.Name, 0, 0)
+	events, err := s.db.GetTimeline(ctx, input.Layer, input.Name, 0, 0)
 	if err != nil {
 		return nil, CheckConsistencyOutput{}, err
 	}
 
 	output := CheckConsistencyOutput{
-		Entity:        entityOutputFromGraph(entity),
-		Relationships: relationshipOutputsFromGraph(rels),
-		Events:        eventOutputsFromGraph(events),
+		Entity:        entityOutputFromStore(entity),
+		Relationships: relationshipOutputsFromStore(rels),
+		Events:        eventOutputsFromStore(events),
 	}
 	return nil, output, nil
 }
@@ -390,7 +392,7 @@ func schemaOutputFromConfig(schema *config.Schema) SchemaOutput {
 	return out
 }
 
-func entityOutputFromGraph(entity *graph.Entity) EntityOutput {
+func entityOutputFromStore(entity *store.Entity) EntityOutput {
 	if entity == nil {
 		return EntityOutput{}
 	}
@@ -406,10 +408,11 @@ func entityOutputFromGraph(entity *graph.Entity) EntityOutput {
 		SourceHash: entity.SourceHash,
 		Tags:       append([]string{}, entity.Tags...),
 		Properties: properties,
+		Body:       entity.Body,
 	}
 }
 
-func entitySummaryOutputFromGraph(entity graph.EntitySummary) EntitySummaryOutput {
+func entitySummaryOutputFromStore(entity store.EntitySummary) EntitySummaryOutput {
 	return EntitySummaryOutput{
 		Name:       entity.Name,
 		EntityType: entity.EntityType,
@@ -418,17 +421,18 @@ func entitySummaryOutputFromGraph(entity graph.EntitySummary) EntitySummaryOutpu
 	}
 }
 
-func searchResultOutputFromGraph(result graph.SearchResult) SearchResultOutput {
+func searchResultOutputFromStore(result store.SearchResult) SearchResultOutput {
 	return SearchResultOutput{
 		Name:       result.Name,
 		EntityType: result.EntityType,
 		Layer:      result.Layer,
 		Tags:       append([]string{}, result.Tags...),
 		Score:      result.Score,
+		Snippet:    result.Snippet,
 	}
 }
 
-func relationshipOutputFromGraph(rel graph.Relationship) RelationshipOutput {
+func relationshipOutputFromStore(rel store.Relationship) RelationshipOutput {
 	return RelationshipOutput{
 		From: EntityRefOutput{
 			Name:       rel.From.Name,
@@ -446,7 +450,7 @@ func relationshipOutputFromGraph(rel graph.Relationship) RelationshipOutput {
 	}
 }
 
-func currentStateOutputFromGraph(state *graph.CurrentState) CurrentStateOutput {
+func currentStateOutputFromStore(state *store.CurrentState) CurrentStateOutput {
 	if state == nil {
 		return CurrentStateOutput{}
 	}
@@ -454,20 +458,20 @@ func currentStateOutputFromGraph(state *graph.CurrentState) CurrentStateOutput {
 	current := copyMap(state.CurrentProperties)
 	return CurrentStateOutput{
 		BaseProperties:    base,
-		Events:            eventOutputsFromGraph(state.Events),
+		Events:            eventOutputsFromStore(state.Events),
 		CurrentProperties: current,
 	}
 }
 
-func eventOutputsFromGraph(events []graph.Event) []EventOutput {
+func eventOutputsFromStore(events []store.Event) []EventOutput {
 	output := make([]EventOutput, 0, len(events))
 	for _, event := range events {
-		output = append(output, eventOutputFromGraph(event))
+		output = append(output, eventOutputFromStore(event))
 	}
 	return output
 }
 
-func eventOutputFromGraph(event graph.Event) EventOutput {
+func eventOutputFromStore(event store.Event) EventOutput {
 	return EventOutput{
 		Name:         event.Name,
 		Layer:        event.Layer,
@@ -475,11 +479,11 @@ func eventOutputFromGraph(event graph.Event) EventOutput {
 		DateInWorld:  event.DateInWorld,
 		Participants: append([]string{}, event.Participants...),
 		Location:     append([]string{}, event.Location...),
-		Consequences: consequenceOutputsFromGraph(event.Consequences),
+		Consequences: consequenceOutputsFromStore(event.Consequences),
 	}
 }
 
-func consequenceOutputsFromGraph(consequences []graph.Consequence) []ConsequenceOutput {
+func consequenceOutputsFromStore(consequences []store.Consequence) []ConsequenceOutput {
 	output := make([]ConsequenceOutput, 0, len(consequences))
 	for _, consequence := range consequences {
 		output = append(output, ConsequenceOutput{
@@ -492,19 +496,19 @@ func consequenceOutputsFromGraph(consequences []graph.Consequence) []Consequence
 	return output
 }
 
-func relationshipOutputsFromGraph(rels []graph.Relationship) []RelationshipOutput {
+func relationshipOutputsFromStore(rels []store.Relationship) []RelationshipOutput {
 	output := make([]RelationshipOutput, 0, len(rels))
 	for _, rel := range rels {
-		output = append(output, relationshipOutputFromGraph(rel))
+		output = append(output, relationshipOutputFromStore(rel))
 	}
 	return output
 }
 
-func dedupeRelationships(rels []graph.Relationship) []graph.Relationship {
+func dedupeRelationships(rels []store.Relationship) []store.Relationship {
 	if len(rels) == 0 {
 		return rels
 	}
-	seen := make(map[string]graph.Relationship, len(rels))
+	seen := make(map[string]store.Relationship, len(rels))
 	order := make([]string, 0, len(rels))
 	for _, rel := range rels {
 		key := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d",
@@ -522,7 +526,7 @@ func dedupeRelationships(rels []graph.Relationship) []graph.Relationship {
 		seen[key] = rel
 		order = append(order, key)
 	}
-	unique := make([]graph.Relationship, 0, len(order))
+	unique := make([]store.Relationship, 0, len(order))
 	for _, key := range order {
 		unique = append(unique, seen[key])
 	}

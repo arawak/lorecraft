@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 )
 
 func querySearchCmd() *cobra.Command {
@@ -16,7 +15,7 @@ func querySearchCmd() *cobra.Command {
 	var layer string
 	cmd := &cobra.Command{
 		Use:   "search <text>",
-		Short: "Search the graph using full-text index",
+		Short: "Search the database using full-text search",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := args[0]
@@ -36,13 +35,13 @@ func runQuerySearch(cmd *cobra.Command, query, entityType, layer string) error {
 		return err
 	}
 
-	client, err := graph.NewClient(ctx, cfg.Neo4j.URI, cfg.Neo4j.Username, cfg.Neo4j.Password, cfg.Neo4j.Database)
+	db, err := openDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer db.Close(ctx)
 
-	results, err := client.Search(ctx, query, layer, entityType)
+	results, err := db.Search(ctx, query, layer, entityType)
 	if err != nil {
 		return err
 	}
@@ -53,6 +52,9 @@ func runQuerySearch(cmd *cobra.Command, query, entityType, layer string) error {
 
 	for _, result := range results {
 		fmt.Fprintf(os.Stdout, "%s (%s) [%s] score=%.2f\n", result.Name, result.EntityType, result.Layer, result.Score)
+		if result.Snippet != "" {
+			fmt.Fprintf(os.Stdout, "  %s\n", result.Snippet)
+		}
 	}
 	return nil
 }

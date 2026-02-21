@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
+	"lorecraft/internal/store"
 )
 
-type mockGraphClient struct {
-	entities      []graph.EntityInput
+type mockStore struct {
+	entities      []store.EntityInput
 	relationships []struct {
 		fromName  string
 		fromLayer string
@@ -32,7 +32,14 @@ type mockGraphClient struct {
 	entityLayers map[string]map[string]struct{}
 }
 
-func (m *mockGraphClient) UpsertEntity(ctx context.Context, e graph.EntityInput) error {
+func (m *mockStore) Close(ctx context.Context) error { return nil }
+
+func (m *mockStore) EnsureSchema(ctx context.Context, schema *config.Schema) error {
+	m.ensureCalled = true
+	return nil
+}
+
+func (m *mockStore) UpsertEntity(ctx context.Context, e store.EntityInput) error {
 	if m.failUpsert && e.Name == "Test NPC" {
 		return errors.New("forced error")
 	}
@@ -40,7 +47,7 @@ func (m *mockGraphClient) UpsertEntity(ctx context.Context, e graph.EntityInput)
 	return nil
 }
 
-func (m *mockGraphClient) UpsertRelationship(ctx context.Context, fromName, fromLayer, toName, toLayer, relType string) error {
+func (m *mockStore) UpsertRelationship(ctx context.Context, fromName, fromLayer, toName, toLayer, relType string) error {
 	m.relationships = append(m.relationships, struct {
 		fromName  string
 		fromLayer string
@@ -51,7 +58,7 @@ func (m *mockGraphClient) UpsertRelationship(ctx context.Context, fromName, from
 	return nil
 }
 
-func (m *mockGraphClient) RemoveStaleNodes(ctx context.Context, layer string, currentSourceFiles []string) (int64, error) {
+func (m *mockStore) RemoveStaleNodes(ctx context.Context, layer string, currentSourceFiles []string) (int64, error) {
 	m.removeCalls = append(m.removeCalls, struct {
 		layer string
 		files []string
@@ -59,12 +66,7 @@ func (m *mockGraphClient) RemoveStaleNodes(ctx context.Context, layer string, cu
 	return int64(0), nil
 }
 
-func (m *mockGraphClient) EnsureIndexes(ctx context.Context, schema *config.Schema) error {
-	m.ensureCalled = true
-	return nil
-}
-
-func (m *mockGraphClient) GetLayerHashes(ctx context.Context, layer string) (map[string]string, error) {
+func (m *mockStore) GetLayerHashes(ctx context.Context, layer string) (map[string]string, error) {
 	if m.layerHashes == nil {
 		return map[string]string{}, nil
 	}
@@ -74,7 +76,7 @@ func (m *mockGraphClient) GetLayerHashes(ctx context.Context, layer string) (map
 	return map[string]string{}, nil
 }
 
-func (m *mockGraphClient) FindEntityLayer(ctx context.Context, name string, layers []string) (string, error) {
+func (m *mockStore) FindEntityLayer(ctx context.Context, name string, layers []string) (string, error) {
 	if m.entityLayers == nil {
 		return "", nil
 	}
@@ -91,10 +93,54 @@ func (m *mockGraphClient) FindEntityLayer(ctx context.Context, name string, laye
 	return "", nil
 }
 
+func (m *mockStore) GetEntity(ctx context.Context, name, entityType string) (*store.Entity, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetRelationships(ctx context.Context, name, relType, direction string, depth int) ([]store.Relationship, error) {
+	return nil, nil
+}
+
+func (m *mockStore) ListEntities(ctx context.Context, entityType, layer, tag string) ([]store.EntitySummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) Search(ctx context.Context, query, layer, entityType string) ([]store.SearchResult, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetCurrentState(ctx context.Context, name, layer string) (*store.CurrentState, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetTimeline(ctx context.Context, layer, entity string, fromSession, toSession int) ([]store.Event, error) {
+	return nil, nil
+}
+
+func (m *mockStore) ListDanglingPlaceholders(ctx context.Context) ([]store.EntitySummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) ListOrphanedEntities(ctx context.Context) ([]store.EntitySummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) ListDuplicateNames(ctx context.Context) ([]store.EntitySummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) ListCrossLayerViolations(ctx context.Context) ([]store.EntitySummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) RunSQL(ctx context.Context, query string, params map[string]any) ([]map[string]any, error) {
+	return nil, nil
+}
+
 func TestRun_BasicIngestion(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
-	client := &mockGraphClient{}
+	client := &mockStore{}
 
 	result, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
@@ -118,7 +164,7 @@ func TestRun_BasicIngestion(t *testing.T) {
 func TestRun_SkipsUnknownTypes(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
-	client := &mockGraphClient{}
+	client := &mockStore{}
 
 	result, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
@@ -133,7 +179,7 @@ func TestRun_SkipsUnknownTypes(t *testing.T) {
 func TestRun_SkipsNoFrontmatter(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
-	client := &mockGraphClient{}
+	client := &mockStore{}
 
 	result, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
@@ -148,7 +194,7 @@ func TestRun_SkipsNoFrontmatter(t *testing.T) {
 func TestRun_RelatedField(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
-	client := &mockGraphClient{}
+	client := &mockStore{}
 
 	_, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
@@ -169,7 +215,7 @@ func TestRun_RelatedField(t *testing.T) {
 func TestRun_FieldMappingResolution(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
-	client := &mockGraphClient{}
+	client := &mockStore{}
 
 	_, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
@@ -191,7 +237,7 @@ func TestRun_FieldMappingResolution(t *testing.T) {
 func TestRun_ContinuesOnError(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
-	client := &mockGraphClient{failUpsert: true}
+	client := &mockStore{failUpsert: true}
 
 	result, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
@@ -205,7 +251,7 @@ func TestRun_ContinuesOnError(t *testing.T) {
 func TestRun_RemoveStaleNodes(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
-	client := &mockGraphClient{}
+	client := &mockStore{}
 
 	_, err := Run(context.Background(), cfg, schema, client, Options{})
 	if err != nil {
@@ -227,7 +273,7 @@ func TestRun_IncrementalSkip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compute hash: %v", err)
 	}
-	client := &mockGraphClient{
+	client := &mockStore{
 		layerHashes: map[string]map[string]string{
 			"setting": {path: hash},
 		},
@@ -253,14 +299,14 @@ func TestRun_IncrementalSkip(t *testing.T) {
 func TestRun_EventConsequences(t *testing.T) {
 	cfg := testProjectConfig(t)
 	schema := testSchema(t)
-	client := &mockGraphClient{}
+	client := &mockStore{}
 
 	_, err := Run(context.Background(), cfg, schema, client, Options{Full: true})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 
-	var found *graph.EntityInput
+	var found *store.EntityInput
 	for i := range client.entities {
 		if client.entities[i].Name == "Test Event" {
 			found = &client.entities[i]
@@ -299,7 +345,7 @@ func TestRun_FullIngestionOverridesHashes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compute hash: %v", err)
 	}
-	client := &mockGraphClient{
+	client := &mockStore{
 		layerHashes: map[string]map[string]string{
 			"setting": {path: hash},
 		},
@@ -325,16 +371,16 @@ func TestRun_FullIngestionOverridesHashes(t *testing.T) {
 func TestRun_DependsOnResolution(t *testing.T) {
 	settingDir := t.TempDir()
 	cfg := &config.ProjectConfig{
-		Project: "test",
-		Version: 1,
-		Neo4j:   config.Neo4jConfig{URI: "bolt://localhost:7687"},
+		Project:  "test",
+		Version:  1,
+		Database: config.DatabaseConfig{DSN: "postgres://localhost:5432/lorecraft"},
 		Layers: []config.Layer{
 			{Name: "setting", Paths: []string{settingDir}, Canonical: true},
 			{Name: "campaign", Paths: []string{filepath.Join("testdata", "lore")}, Canonical: false, DependsOn: []string{"setting"}},
 		},
 	}
 	schema := testSchema(t)
-	client := &mockGraphClient{
+	client := &mockStore{
 		entityLayers: map[string]map[string]struct{}{
 			strings.ToLower("The Watch"): {"setting": {}},
 		},
@@ -385,9 +431,9 @@ func TestResolveFieldValue(t *testing.T) {
 func testProjectConfig(t *testing.T) *config.ProjectConfig {
 	t.Helper()
 	return &config.ProjectConfig{
-		Project: "test",
-		Version: 1,
-		Neo4j:   config.Neo4jConfig{URI: "bolt://localhost:7687"},
+		Project:  "test",
+		Version:  1,
+		Database: config.DatabaseConfig{DSN: "postgres://localhost:5432/lorecraft"},
 		Layers: []config.Layer{{
 			Name:  "setting",
 			Paths: []string{filepath.Join("testdata", "lore")},

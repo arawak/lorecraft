@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"lorecraft/internal/config"
-	"lorecraft/internal/graph"
 	"lorecraft/internal/parser"
+	"lorecraft/internal/store"
 )
 
 type Result struct {
@@ -33,9 +33,9 @@ type processedDoc struct {
 	layer config.Layer
 }
 
-func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, client GraphClient, options Options) (*Result, error) {
-	if err := client.EnsureIndexes(ctx, schema); err != nil {
-		return nil, fmt.Errorf("ensure indexes: %w", err)
+func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, db Store, options Options) (*Result, error) {
+	if err := db.EnsureSchema(ctx, schema); err != nil {
+		return nil, fmt.Errorf("ensure schema: %w", err)
 	}
 
 	result := &Result{}
@@ -46,7 +46,7 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 		var existingHashes map[string]string
 		if !options.Full {
 			var err error
-			existingHashes, err = client.GetLayerHashes(ctx, layer.Name)
+			existingHashes, err = db.GetLayerHashes(ctx, layer.Name)
 			if err != nil {
 				return nil, fmt.Errorf("get layer hashes for %s: %w", layer.Name, err)
 			}
@@ -108,18 +108,18 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 				}
 			}
 
-			input := graph.EntityInput{
+			input := store.EntityInput{
 				Name:       doc.Title,
 				EntityType: doc.EntityType,
-				Label:      schema.NodeLabel(doc.EntityType),
 				Layer:      layer.Name,
 				SourceFile: path,
 				SourceHash: hash,
 				Properties: props,
 				Tags:       doc.Tags,
+				Body:       doc.Body,
 			}
 
-			if err := client.UpsertEntity(ctx, input); err != nil {
+			if err := db.UpsertEntity(ctx, input); err != nil {
 				result.Errors = append(result.Errors, fmt.Errorf("upserting %s: %w", path, err))
 				continue
 			}
@@ -139,7 +139,7 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 					targetLayer := item.layer.Name
 					if len(item.layer.DependsOn) > 0 {
 						layers := append([]string{item.layer.Name}, item.layer.DependsOn...)
-						layerName, err := client.FindEntityLayer(ctx, target, layers)
+						layerName, err := db.FindEntityLayer(ctx, target, layers)
 						if err != nil {
 							result.Errors = append(result.Errors, fmt.Errorf("finding layer for %s: %w", target, err))
 							continue
@@ -148,7 +148,7 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 							targetLayer = layerName
 						}
 					}
-					if err := client.UpsertRelationship(ctx, item.doc.Title, item.layer.Name, target, targetLayer, mapping.Relationship); err != nil {
+					if err := db.UpsertRelationship(ctx, item.doc.Title, item.layer.Name, target, targetLayer, mapping.Relationship); err != nil {
 						result.Errors = append(result.Errors, fmt.Errorf("upserting relationship for %s: %w", item.doc.Title, err))
 						continue
 					}
@@ -165,7 +165,7 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 				targetLayer := item.layer.Name
 				if len(item.layer.DependsOn) > 0 {
 					layers := append([]string{item.layer.Name}, item.layer.DependsOn...)
-					layerName, err := client.FindEntityLayer(ctx, target, layers)
+					layerName, err := db.FindEntityLayer(ctx, target, layers)
 					if err != nil {
 						result.Errors = append(result.Errors, fmt.Errorf("finding layer for %s: %w", target, err))
 						continue
@@ -174,7 +174,7 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 						targetLayer = layerName
 					}
 				}
-				if err := client.UpsertRelationship(ctx, item.doc.Title, item.layer.Name, target, targetLayer, "RELATED_TO"); err != nil {
+				if err := db.UpsertRelationship(ctx, item.doc.Title, item.layer.Name, target, targetLayer, "RELATED_TO"); err != nil {
 					result.Errors = append(result.Errors, fmt.Errorf("upserting related for %s: %w", item.doc.Title, err))
 					continue
 				}
@@ -184,7 +184,7 @@ func Run(ctx context.Context, cfg *config.ProjectConfig, schema *config.Schema, 
 	}
 
 	for _, layer := range cfg.Layers {
-		deleted, err := client.RemoveStaleNodes(ctx, layer.Name, layerFiles[layer.Name])
+		deleted, err := db.RemoveStaleNodes(ctx, layer.Name, layerFiles[layer.Name])
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("removing stale nodes for %s: %w", layer.Name, err))
 			continue

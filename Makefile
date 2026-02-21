@@ -5,7 +5,7 @@ GO := go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: all build clean fmt vet test tidy neo4j-up neo4j-down neo4j-logs
+.PHONY: all build clean fmt vet test tidy db-up db-down db-logs
 
 all: build
 
@@ -30,11 +30,11 @@ test:
 tidy:
 	$(GO) mod tidy
 
-neo4j-up:
+db-up:
 	docker compose -f compose.yaml up -d
 
-neo4j-down:
+db-down:
 	docker compose -f compose.yaml down
 
-neo4j-logs:
-	docker compose -f compose.yaml logs -f neo4j
+db-logs:
+	docker compose -f compose.yaml logs -f postgres
