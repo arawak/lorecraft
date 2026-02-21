@@ -1,6 +1,6 @@
 module lorecraft
 
-go 1.25.6
+go 1.24
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.2.0
