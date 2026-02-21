@@ -4,7 +4,7 @@
 
 Lorecraft is a graph-backed knowledge management system with an MCP interface, designed for managing interconnected lore and world-building content. While the initial use case is a D&D campaign setting, the system is domain-agnostic — entity types, relationship types, and content structure are defined through configuration, not code.
 
-The core insight: **markdown files are the source of truth; the database is a materialised view.** Content is authored and maintained as markdown with structured YAML frontmatter. Lorecraft parses these files, builds a graph of entities and relationships in PostgreSQL, and exposes that graph to AI coding agents via an MCP server. The database can always be destroyed and rebuilt from the source files.
+The core insight: **markdown files are the source of truth; the database is a materialised view.** Content is authored and maintained as markdown with structured YAML frontmatter. Lorecraft parses these files, builds a graph of entities and relationships in a database (PostgreSQL or SQLite), and exposes that graph to AI coding agents via an MCP server. The database can always be destroyed and rebuilt from the source files.
 
 ## Key Concepts
 
@@ -41,25 +41,30 @@ The system can compute **current state** for any entity by starting with the can
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌────────────┐
-│  Markdown    │────▶│  Ingestion   │────▶│ PostgreSQL │
-│  Files       │     │  (Go CLI)    │     │  (Docker)  │
+│  Markdown    │────▶│  Ingestion   │────▶│ Database   │
+│  Files       │     │  (Go CLI)    │     │ (PG/SQLite)│
 └─────────────┘     └──────────────┘     └──────┬──────┘
-                                                │
+                                                 │
 ┌─────────────┐     ┌──────────────┐            │
 │  OpenCode    │◀──▶│  MCP Server  │◀───────────┘
 │  + agents    │     │  (Go, stdio) │
 └─────────────┘     └──────────────┘
 ```
 
-All components talk to the same PostgreSQL instance. The CLI is the human operator's interface; the MCP server is the AI's interface. Both share the same internal Go packages.
+All components talk to the same database instance. The CLI is the human operator's interface; the MCP server is the AI's interface. Both share the same internal Go packages.
 
 ### Components
 
-**PostgreSQL** — Relational database with full-text search, runs as a Docker container on the host. Stores all entities, relationships, and events. Accessed via port 5432.
+**Database (PostgreSQL or SQLite)** — Lorecraft supports two database backends:
+
+- **PostgreSQL** — Recommended for production. Full-text search via tsvector/tsquery, runs as a Docker container. Accessed via port 5432.
+- **SQLite** — Good for local development and single-user scenarios. No external dependencies. Uses FTS5 for full-text search with automatic sync triggers. Configured via `sqlite://` DSN scheme.
+
+Both backends implement the same `store.Store` interface and provide identical functionality.
 
 **Lorecraft CLI** — Single Go binary providing all commands: `init`, `ingest`, `validate`, `query`, and `serve`. The CLI reads `lorecraft.yaml` for project configuration and `schema.yaml` for the domain model.
 
-**Lorecraft MCP Server** — Started via `lorecraft serve`. Runs as a long-lived process communicating over stdin/stdout using the MCP JSON-RPC protocol. Exposes query tools to AI agents (OpenCode, subagents). Holds a persistent connection to PostgreSQL for the lifetime of the process.
+**Lorecraft MCP Server** — Started via `lorecraft serve`. Runs as a long-lived process communicating over stdin/stdout using the MCP JSON-RPC protocol. Exposes query tools to AI agents (OpenCode, subagents). Holds a persistent connection to the database for the lifetime of the process.
 
 ## Project Structure (Go)
 
@@ -72,7 +77,8 @@ lorecraft/
 │   ├── config/                 # Project + schema YAML loading
 │   ├── parser/                 # Markdown frontmatter parsing
 │   ├── store/                  # Storage interface + types
-│   │   └── postgres/           # PostgreSQL implementation
+│   │   ├── postgres/           # PostgreSQL implementation
+│   │   └── sqlite/             # SQLite implementation (FTS5)
 │   ├── ingest/                 # Pipeline: parse → validate → upsert
 │   ├── validate/               # Schema + consistency checks
 │   └── mcp/                    # MCP tool definitions + handlers
@@ -96,7 +102,14 @@ project: westlands
 version: 1
 
 database:
+  # DSN scheme selects backend:
+  # - postgres://... for PostgreSQL (requires running Postgres server)
+  # - sqlite://... for SQLite (file-based, no external dependencies)
   dsn: "postgres://lorecraft:changeme@localhost:5432/lorecraft?sslmode=disable"
+  # SQLite alternatives:
+  # dsn: "sqlite://./lorecraft.db"         # relative path
+  # dsn: "sqlite:///absolute/path.db"      # absolute path
+  # dsn: "sqlite://:memory:"               # in-memory (useful for tests)
 
 layers:
   - name: setting
@@ -478,7 +491,7 @@ Loads and validates `lorecraft.yaml` and `schema.yaml`. Provides typed structs f
 Parses markdown files to extract YAML frontmatter. Returns a `Document` struct containing the frontmatter as a map, the entity type, and the prose body. Does not interpret field mappings — that is the ingestion pipeline's responsibility.
 
 ### `internal/store`
-Defines the `Store` interface that abstracts storage operations. All consumer packages (ingest, validate, MCP) depend on this interface, not on the concrete PostgreSQL implementation.
+Defines the `Store` interface that abstracts storage operations. All consumer packages (ingest, validate, MCP) depend on this interface, not on the concrete database implementation.
 
 Domain types (`Entity`, `EntityInput`, `Relationship`, `SearchResult`, etc.) are defined here.
 
@@ -488,13 +501,24 @@ PostgreSQL implementation of `store.Store`. Uses `pgx` for connection pooling. E
 - `UpsertRelationship(from, to, relType)` — insert edge, creating placeholder if needed
 - `GetEntity(name, type)` — fetch entity and properties
 - `GetRelationships(name, depth, relType, direction)` — iterative BFS traversal
-- `Search(query, layer, type)` — full-text search with snippets
+- `Search(query, layer, type)` — full-text search with snippets using tsvector
 - `GetCurrentState(name, layer)` — canonical base + events composited
 - `GetTimeline(layer, entity, fromSession, toSession)` — event queries
 - `ListEntities(type, layer, tag)` — filtered listing
 - `RunSQL(query, params)` — raw SQL escape hatch
 
 All methods accept `context.Context` and return domain-typed results.
+
+### `internal/store/sqlite`
+SQLite implementation of `store.Store`. Uses `modernc.org/sqlite` (pure Go, FTS5 enabled). SQLite-specific configuration:
+- Pragmas: `busy_timeout=30000`, `journal_mode=WAL`, `foreign_keys=ON`
+- FTS5 virtual table for full-text search with automatic sync triggers
+- bm25() ranking with weights (name=10, tags=4, body=1)
+- Web-search style query conversion for FTS5 MATCH syntax
+
+Backend selection is determined by DSN scheme in `lorecraft.yaml`:
+- `postgres://...` → PostgreSQL backend
+- `sqlite://...` → SQLite backend
 
 ### `internal/ingest`
 Orchestrates the ingestion pipeline. Walks directory trees, invokes the parser, resolves field mappings against the schema, calls store operations to upsert entities and edges, handles incremental updates via content hashing, and tracks deletions.

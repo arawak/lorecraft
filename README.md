@@ -14,7 +14,7 @@ Westlands?" without me having to paste context into every prompt.
 
 Lorecraft is the toolset that came out of that need. Markdown files remain the
 source of truth (you still write and edit them like normal), but lorecraft
-parses them into a PostgreSQL database and exposes that data to AI agents via the
+parses them into a database (PostgreSQL or SQLite) and exposes that data to AI agents via the
 Model Context Protocol. The database is a materialised view that can always be
 destroyed and rebuilt from the source files.
 
@@ -49,7 +49,7 @@ run are skipped based on content hashes stored in the database.
 ## Prerequisites
 
 - Go 1.22+
-- Docker (for PostgreSQL)
+- Docker (optional, for PostgreSQL backend)
 
 ## Quickstart
 
@@ -92,7 +92,10 @@ project: my-setting
 version: 1
 
 database:
-  dsn: "postgres://lorecraft:changeme@localhost:5432/lorecraft?sslmode=disable"
+  # PostgreSQL (recommended for production)
+  # dsn: "postgres://lorecraft:changeme@localhost:5432/lorecraft?sslmode=disable"
+  # SQLite (good for local development, no external dependencies)
+  dsn: "sqlite://./lorecraft.db"
 
 layers:
   - name: setting
@@ -124,7 +127,13 @@ project: my-setting
 version: 1
 
 database:
+  # DSN scheme selects backend:
+  # - postgres://... for PostgreSQL (requires running Postgres server)
+  # - sqlite://... for SQLite (file-based, no external dependencies)
   dsn: "postgres://lorecraft:changeme@localhost:5432/lorecraft?sslmode=disable"
+  # dsn: "sqlite://./lorecraft.db"         # relative path
+  # dsn: "sqlite:///absolute/path.db"      # absolute path
+  # dsn: "sqlite://:memory:"               # in-memory (useful for tests)
 
 layers:
   - name: setting
